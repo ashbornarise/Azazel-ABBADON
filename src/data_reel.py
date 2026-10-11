@@ -56,14 +56,22 @@ def telecharger(
             return df["Close"].dropna()
 
     print(f"  Telechargement {symbole} ({periode})...")
-    ticker = yf.Ticker(symbole)
-    df = ticker.history(period=periode, interval=intervalle)
+    try:
+        ticker = yf.Ticker(symbole)
+        df = ticker.history(period=periode, interval=intervalle)
+        if not df.empty:
+            df.to_csv(cache_path)
+            return df["Close"].dropna()
+    except Exception:
+        pass
 
-    if df.empty:
-        raise ValueError(f"Aucune donnee pour {symbole}")
+    if cache_path.exists():
+        df = pd.read_csv(cache_path, index_col=0, parse_dates=True)
+        if len(df) > 100:
+            print(f"    -> Fallback cache ({len(df)} jours)")
+            return df["Close"].dropna()
 
-    df.to_csv(cache_path)
-    return df["Close"].dropna()
+    raise ValueError(f"Aucune donnee pour {symbole}")
 
 
 def telecharger_tous(
