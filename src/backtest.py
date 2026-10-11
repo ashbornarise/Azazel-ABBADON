@@ -102,15 +102,19 @@ def backtest(
                 violations += 1
 
             # Mettre à jour le capital simulé
-            if i > 0:
+            if i > 0 and prix.iloc[i - 1] > 0:
                 ret_jour = (prix.iloc[i] - prix.iloc[i - 1]) / prix.iloc[i - 1]
-                capital *= (1 + positions_filtrees[-1] * ret_jour)
+                if np.isfinite(ret_jour):
+                    capital *= (1 + positions_filtrees[-1] * ret_jour)
                 module_survie.mettre_a_jour_capital(capital, date_obj)
 
         position = pd.Series(positions_filtrees, index=position.index)
 
-    # Rendements
+    # Rendements — protéger contre NaN/inf (crises extrêmes, prix à 0)
     ret = prix.pct_change().fillna(0.0)
+    ret = ret.replace([np.inf, -np.inf], 0.0)
+    ret = ret.clip(lower=-0.99)  # un actif ne peut pas perdre plus de 99% en un jour
+
     trades = position.diff().abs().fillna(0.0)
     strat_ret = position * ret - trades * cout
     equity = (1 + strat_ret).cumprod()

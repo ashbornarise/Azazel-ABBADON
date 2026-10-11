@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
 
+import numpy as np
 import tomllib
 from pathlib import Path
 
@@ -125,15 +126,17 @@ class ModuleSurvie:
 
     def _perte_journaliere(self) -> float:
         """Perte depuis le début de la journée en fraction."""
-        if self.capital_debut_journee <= 0:
+        if not np.isfinite(self.capital_debut_journee) or self.capital_debut_journee <= 0:
             return 0.0
-        return max(0.0, 1.0 - self.capital / self.capital_debut_journee)
+        ratio = self.capital / self.capital_debut_journee
+        return max(0.0, 1.0 - ratio) if np.isfinite(ratio) else 0.0
 
     def _drawdown(self) -> float:
         """Drawdown depuis le plus haut historique en fraction."""
-        if self.capital_max <= 0:
+        if not np.isfinite(self.capital_max) or self.capital_max <= 0:
             return 0.0
-        return max(0.0, 1.0 - self.capital / self.capital_max)
+        ratio = self.capital / self.capital_max
+        return max(0.0, 1.0 - ratio) if np.isfinite(ratio) else 0.0
 
     # ─── Vérification des données ─────────────────────────────
 

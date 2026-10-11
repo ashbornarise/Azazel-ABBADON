@@ -57,7 +57,7 @@ pytest tests/ -v
 
 - [x] Phase 0 : Squelette du dépôt, config.toml, données
 - [x] Phase 1 : survie.py, watchdog.py et tests
-- [ ] Phase 2 : Banc de stress (stress.py, rejeu crises, Monte Carlo)
-- [ ] Phase 3 : Stratégies + témoin aléatoire
+- [x] Phase 2 : Banc de stress (stress.py, rejeu crises, Monte Carlo, chocs, rapport)
+- [ ] Phase 3 : Stratégies + témoin aléatoire (verdict honnête)
 - [ ] Phase 4 : Trading sur papier (3-6 mois)
 - [ ] Phase 5 : Réel (décision Clément uniquement)
