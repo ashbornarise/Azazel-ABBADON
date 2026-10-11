@@ -8,14 +8,14 @@
   :root { --bg:#0d1117; --s:#161b22; --b:#21262d; --fg:#c9d1d9; --fg2:#8b949e; --hi:#e6edf3; --g:#3fb950; --r:#f85149; --y:#d29922; --bl:#58a6ff; }
   *{box-sizing:border-box;margin:0}
   body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--fg);padding:16px}
-  .top{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--b);margin-bottom:14px}
+  .top{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--b);margin-bottom:14px;flex-wrap:wrap;gap:8px}
   .top h1{font-size:15px;color:var(--hi)} .top small{color:var(--fg2);font-size:11px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
   .c{background:var(--s);border:1px solid var(--b);border-radius:6px;padding:12px}
   .cl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--fg2);margin-bottom:4px}
   .cv{font-size:20px;font-weight:700;color:var(--hi);font-variant-numeric:tabular-nums}
   .cs{font-size:10px;color:var(--fg2);margin-top:2px}
-  .green{color:var(--g)} .red{color:var(--r)} .yellow{color:var(--y)}
+  .green{color:var(--g)} .red{color:var(--r)} .yellow{color:var(--y)} .blue{color:var(--bl)}
   .badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
   .badge-g{background:rgba(63,185,80,.15);color:var(--g)}
   .badge-r{background:rgba(248,81,73,.15);color:var(--r)}
@@ -25,29 +25,176 @@
   td{padding:8px 10px;border-bottom:1px solid var(--b)} tr:last-child td{border-bottom:none}
   .section{font-size:13px;font-weight:600;color:var(--hi);margin:18px 0 8px}
   .footer{text-align:center;padding:20px 0;color:var(--fg2);font-size:10px}
-  @media(max-width:600px){.grid{grid-template-columns:1fr 1fr}}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+  .charts canvas{width:100%;height:200px;display:block}
+  .tbl-wrap{overflow-x:auto}
+  @media(max-width:700px){.grid{grid-template-columns:1fr 1fr} .charts{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
 <div class="top">
-  <div><h1>Rex Clemens Capital</h1><small>Analyse quotidienne</small></div>
+  <div><h1>Rex Clemens Capital</h1><small>Analyse quotidienne — Donnees reelles</small></div>
   <div id="date" style="font-size:11px;color:var(--fg2)"></div>
 </div>
 
 <div class="grid" id="resume"></div>
 
+<!-- CHARTS -->
+<div class="charts">
+  <div class="c">
+    <div class="cl">Sharpe ML vs Buy&Hold</div>
+    <canvas id="chartSharpe"></canvas>
+  </div>
+  <div class="c">
+    <div class="cl">Exposition ML (%)</div>
+    <canvas id="chartExpo"></canvas>
+  </div>
+</div>
+
+<div class="charts">
+  <div class="c">
+    <div class="cl">Rendement ML (%)</div>
+    <canvas id="chartRendement"></canvas>
+  </div>
+  <div class="c">
+    <div class="cl">Max Drawdown ML (%)</div>
+    <canvas id="chartDD"></canvas>
+  </div>
+</div>
+
+<!-- TABLE -->
 <div class="section">Signaux du jour</div>
 <div class="c">
+  <div class="tbl-wrap">
   <table>
-    <thead><tr><th>Actif</th><th>Prix</th><th>Signal</th><th>Exposition</th><th>Sharpe ML</th><th>Sharpe B&H</th><th>ML gagne?</th></tr></thead>
+    <thead><tr><th>Actif</th><th>Prix</th><th>Signal</th><th>Exposition</th><th>Sharpe ML</th><th>Sharpe B&H</th><th>Rendement</th><th>Max DD</th><th>ML gagne?</th></tr></thead>
     <tbody id="signaux"></tbody>
   </table>
+  </div>
 </div>
+
+<!-- JOURNAL -->
+<div class="section">Historique des analyses</div>
+<div class="c" id="journal"></div>
 
 <div class="footer">Aucun argent reel &middot; Simulation uniquement &middot; Rafraichissement toutes les 60s</div>
 
 <script>
+function drawBarChart(canvas, labels, datasets, yLabel) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = {t:10,r:10,b:36,l:40};
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+
+  ctx.clearRect(0,0,W,H);
+
+  const allVals = datasets.flatMap(d => d.data);
+  let maxV = Math.max(...allVals, 0.1);
+  let minV = Math.min(...allVals, 0);
+  if (minV > 0) minV = 0;
+  const range = maxV - minV || 1;
+  maxV += range * 0.1;
+  minV -= range * 0.1;
+  const rng = maxV - minV;
+
+  const n = labels.length;
+  const groupW = cW / n;
+  const barW = groupW / (datasets.length + 1);
+
+  // Grid
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + cH * (1 - i/4);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText((minV + rng * i/4).toFixed(2), pad.l - 4, y + 3);
+  }
+
+  // Zero line
+  const zeroY = pad.t + cH * (1 - (0 - minV) / rng);
+  ctx.strokeStyle = '#8b949e';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(pad.l, zeroY); ctx.lineTo(W - pad.r, zeroY); ctx.stroke();
+
+  // Bars
+  datasets.forEach((ds, di) => {
+    ctx.fillStyle = ds.color;
+    ds.data.forEach((v, i) => {
+      const x = pad.l + i * groupW + (di + 0.5) * barW;
+      const barH = (v / rng) * cH;
+      const y = zeroY - barH;
+      ctx.fillRect(x, Math.min(y, zeroY), barW - 2, Math.abs(barH));
+    });
+  });
+
+  // Labels
+  ctx.fillStyle = '#c9d1d9';
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  labels.forEach((l, i) => {
+    ctx.fillText(l, pad.l + (i + 0.5) * groupW, H - pad.b + 14);
+  });
+
+  // Legend
+  const legX = pad.l;
+  datasets.forEach((ds, i) => {
+    const lx = legX + i * 70;
+    ctx.fillStyle = ds.color;
+    ctx.fillRect(lx, H - 10, 10, 8);
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '9px -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(ds.label, lx + 13, H - 3);
+  });
+}
+
+function drawHBarChart(canvas, labels, values, colors) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = {t:10,r:20,b:10,l:60};
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+
+  ctx.clearRect(0,0,W,H);
+
+  const maxV = Math.max(...values.map(Math.abs), 0.1);
+  const n = labels.length;
+  const barH = Math.min(cH / n - 6, 24);
+
+  labels.forEach((l, i) => {
+    const y = pad.t + (i + 0.5) * (cH / n);
+    const w = (values[i] / maxV) * (cW * 0.8);
+    const x = pad.l + (values[i] >= 0 ? 0 : w);
+
+    ctx.fillStyle = colors[i] || '#3fb950';
+    ctx.fillRect(pad.l, y - barH/2, Math.abs(w), barH);
+
+    ctx.fillStyle = '#c9d1d9';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(l, pad.l - 6, y + 4);
+
+    ctx.fillStyle = '#e6edf3';
+    ctx.textAlign = 'left';
+    ctx.fillText(values[i].toFixed(1) + '%', pad.l + Math.abs(w) + 4, y + 4);
+  });
+}
+
 async function load() {
   try {
     const r = await fetch('/api/etat_daily');
@@ -56,17 +203,29 @@ async function load() {
 
     document.getElementById('date').textContent = 'Derniere analyse : ' + d.date;
 
+    // Calculs globaux
+    const bestSharpe = d.actifs.reduce((b, a) => a.sharpe_ml > b.sharpe_ml ? a : b, d.actifs[0]);
+    const avgExpo = (d.actifs.reduce((s, a) => s + a.exposition, 0) / d.actifs.length * 100).toFixed(0);
+    const mlWins = d.actifs.filter(a => a.sharpe_ml > a.sharpe_bh).length;
+
     document.getElementById('resume').innerHTML = `
       <div class="c"><div class="cl">Actifs suivis</div><div class="cv">${d.actifs.length}</div></div>
       <div class="c"><div class="cl">Signal ACHAT</div><div class="cv green">${d.nb_achat}</div></div>
       <div class="c"><div class="cl">Signal CASH</div><div class="cv red">${d.nb_cash}</div></div>
       <div class="c"><div class="cl">Signal NEUTRE</div><div class="cv yellow">${d.nb_neutre}</div></div>
+      <div class="c"><div class="cl">Meilleur Sharpe ML</div><div class="cv blue">${bestSharpe.sharpe_ml}</div><div class="cs">${bestSharpe.nom}</div></div>
+      <div class="c"><div class="cl">Expo. moyenne</div><div class="cv">${avgExpo}%</div></div>
+      <div class="c"><div class="cl">ML bat B&H</div><div class="cv ${mlWins > 0 ? 'green' : 'red'}">${mlWins} / ${d.actifs.length}</div></div>
     `;
 
+    // Table
     let html = '';
     for (const a of d.actifs) {
       const bc = a.decision === 'ACHAT' ? 'g' : a.decision === 'CASH' ? 'r' : 'y';
       const gagne = a.sharpe_ml > a.sharpe_bh ? '<span class="green">OUI</span>' : '<span class="red">NON</span>';
+      const rend = a.rendement_ml !== undefined ? `${a.rendement_ml > 0 ? '+' : ''}${a.rendement_ml}%` : '-';
+      const rendClass = (a.rendement_ml || 0) >= 0 ? 'green' : 'red';
+      const mdd = a.max_dd_ml !== undefined ? `${a.max_dd_ml}%` : '-';
       html += `<tr>
         <td style="color:var(--hi);font-weight:600">${a.nom}<br><span style="font-size:10px;color:var(--fg2)">${a.symbole}</span></td>
         <td>${a.prix.toLocaleString('fr-FR')} $</td>
@@ -74,12 +233,63 @@ async function load() {
         <td>${(a.exposition*100).toFixed(0)}%</td>
         <td>${a.sharpe_ml}</td>
         <td>${a.sharpe_bh}</td>
+        <td class="${rendClass}">${rend}</td>
+        <td class="red">${mdd}</td>
         <td>${gagne}</td>
       </tr>`;
     }
     document.getElementById('signaux').innerHTML = html;
-  } catch(e) {}
+
+    // Charts
+    const labels = d.actifs.map(a => a.nom.substring(0, 6));
+
+    drawBarChart(document.getElementById('chartSharpe'), labels, [
+      { label: 'ML', data: d.actifs.map(a => a.sharpe_ml), color: '#58a6ff' },
+      { label: 'B&H', data: d.actifs.map(a => a.sharpe_bh), color: '#8b949e' },
+    ]);
+
+    drawHBarChart(document.getElementById('chartExpo'),
+      d.actifs.map(a => a.nom.substring(0, 8)),
+      d.actifs.map(a => a.exposition * 100),
+      d.actifs.map(a => a.exposition >= 0.6 ? '#3fb950' : a.exposition <= 0.4 ? '#f85149' : '#d29922')
+    );
+
+    if (d.actifs[0].rendement_ml !== undefined) {
+      drawHBarChart(document.getElementById('chartRendement'),
+        d.actifs.map(a => a.nom.substring(0, 8)),
+        d.actifs.map(a => a.rendement_ml),
+        d.actifs.map(a => a.rendement_ml >= 0 ? '#3fb950' : '#f85149')
+      );
+
+      drawHBarChart(document.getElementById('chartDD'),
+        d.actifs.map(a => a.nom.substring(0, 8)),
+        d.actifs.map(a => a.max_dd_ml),
+        d.actifs.map(() => '#f85149')
+      );
+    }
+
+  } catch(e) { console.error(e); }
+
+  // Journal
+  try {
+    const jr = await fetch('/api/journal_daily');
+    const entries = await jr.json();
+    if (entries.length) {
+      let jhtml = '<table><thead><tr><th>Date</th><th>Actifs</th><th>ACHAT</th><th>CASH</th><th>NEUTRE</th></tr></thead><tbody>';
+      for (const e of entries.slice(-10).reverse()) {
+        jhtml += `<tr><td>${e.date}</td><td>${e.actifs ? e.actifs.length : '-'}</td>
+          <td class="green">${e.nb_achat}</td><td class="red">${e.nb_cash}</td><td class="yellow">${e.nb_neutre}</td></tr>`;
+      }
+      jhtml += '</tbody></table>';
+      document.getElementById('journal').innerHTML = jhtml;
+    } else {
+      document.getElementById('journal').innerHTML = '<div style="padding:10px;color:var(--fg2);font-size:12px">Pas encore d\'historique</div>';
+    }
+  } catch(e) {
+    document.getElementById('journal').innerHTML = '<div style="padding:10px;color:var(--fg2);font-size:12px">Pas encore d\'historique</div>';
+  }
 }
+
 load();
 setInterval(load, 60000);
 </script>

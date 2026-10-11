@@ -26,6 +26,7 @@ from src.survie import ModuleSurvie
 
 ETAT_PATH = Path("data/etat_robot.json")
 ETAT_DAILY_PATH = Path("data/etat_daily.json")
+JOURNAL_DAILY_PATH = Path("data/journal_daily.jsonl")
 PORT = 8777
 
 
@@ -283,6 +284,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 data = ETAT_DAILY_PATH.read_text()
             except FileNotFoundError:
                 data = json.dumps({"error": "Pas encore de donnees. Lancer run_daily.py."})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data.encode())
+            return
+
+        if self.path == "/api/journal_daily":
+            try:
+                lines = JOURNAL_DAILY_PATH.read_text().strip().split("\n")
+                data = json.dumps([json.loads(l) for l in lines if l.strip()])
+            except FileNotFoundError:
+                data = "[]"
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
