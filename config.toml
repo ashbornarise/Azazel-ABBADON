@@ -1,0 +1,54 @@
+# ═══════════════════════════════════════════════════════════════
+# Rex Clemens Capital — Configuration du robot de trading
+# ═══════════════════════════════════════════════════════════════
+# PRINCIPE : la survie du compte passe avant le gain.
+# Aucune de ces règles ne doit être assouplie pour améliorer
+# un résultat de test.
+# ═══════════════════════════════════════════════════════════════
+
+[survie]
+# Risque maximal par trade (fraction du compte)
+risque_max_par_trade = 0.01          # 1 %
+
+# Levier interdit : exposition maximale
+exposition_max = 1.0                 # 1.0 = pas de levier
+
+# Perte maximale sur une journée (fraction du compte)
+# Dépassement → arrêt jusqu'au lendemain
+perte_max_journaliere = 0.03         # 3 %
+
+# Perte maximale depuis le plus haut du compte (drawdown)
+# Dépassement → arrêt complet, remise à zéro par Clément uniquement
+drawdown_max = 0.10                  # 10 %
+
+# Taille maximale d'une position (fraction du compte)
+taille_max_position = 0.25           # 25 %
+
+[donnees]
+# Données manquantes, périmées ou suspectes → passage à l'état liquide
+age_max_donnees_minutes = 30         # données de plus de 30 min = périmées
+prix_saut_max_pct = 0.50             # saut > 50 % en un tick = suspect
+prix_min = 0.0001                    # prix ≤ 0 ou quasi-nul = faux
+
+[connexion]
+# Perte de connexion ou erreurs répétées → état liquide
+erreurs_max_consecutives = 3
+timeout_connexion_secondes = 30
+
+[backtest]
+# Frais + glissement par changement de position
+cout_par_trade = 0.001               # 0,1 %
+# Séparation construction / test
+ratio_construction = 0.70            # 70 % construction, 30 % test final
+
+[stress]
+# Critères de réussite du banc de stress
+seuil_survie_pct_scenarios = 0.95    # 95 % des scénarios doivent passer
+monte_carlo_iterations = 1000
+taille_bloc_bootstrap = 20           # jours par bloc pour Monte Carlo
+
+[watchdog]
+# Intervalle de vérification du watchdog (secondes)
+intervalle_verification = 5
+# Fichier drapeau pour arrêt manuel d'urgence
+fichier_arret_urgence = "ARRET_URGENCE"

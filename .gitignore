@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environnements
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Données
+data/*.csv
+data/*.parquet
+data/*.json
+!data/.gitkeep
+
+# Watchdog
+watchdog_journal.jsonl
+ARRET_URGENCE
+TEST_ARRET_URGENCE
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (JAMAIS de clés API)
+*.env
+.env.*
+secrets/
