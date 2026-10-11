@@ -25,6 +25,7 @@ from src.strategies.ma_cross import MACross
 from src.survie import ModuleSurvie
 
 ETAT_PATH = Path("data/etat_robot.json")
+ETAT_DAILY_PATH = Path("data/etat_daily.json")
 PORT = 8777
 
 
@@ -275,6 +276,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(data.encode())
+            return
+
+        if self.path == "/api/etat_daily":
+            try:
+                data = ETAT_DAILY_PATH.read_text()
+            except FileNotFoundError:
+                data = json.dumps({"error": "Pas encore de donnees. Lancer run_daily.py."})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data.encode())
+            return
+
+        if self.path == "/daily":
+            self.path = "/dashboard_pa.html"
+            super().do_GET()
             return
 
         if self.path == "/" or self.path == "":

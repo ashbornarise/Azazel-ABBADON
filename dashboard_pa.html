@@ -50,7 +50,7 @@
 <script>
 async function load() {
   try {
-    const r = await fetch('/api/etat');
+    const r = await fetch('/api/etat_daily');
     const d = await r.json();
     if (d.error) { document.getElementById('resume').innerHTML = `<div class="c"><div class="cv">${d.error}</div></div>`; return; }
 
