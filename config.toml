@@ -47,6 +47,16 @@ seuil_survie_pct_scenarios = 0.95    # 95 % des scénarios doivent passer
 monte_carlo_iterations = 1000
 taille_bloc_bootstrap = 20           # jours par bloc pour Monte Carlo
 
+[marche]
+# Marchés visés (les 3, traités différemment)
+actifs = ["actions", "crypto", "devises"]
+# Rythme de trading
+rythme = "journalier"            # un trade par jour maximum
+# Perte maximale acceptable (en euros)
+perte_max_euros = 30.0           # 30 € max sans que ça fasse mal
+# Courtier : à déterminer
+courtier = ""                    # en attente de décision
+
 [watchdog]
 # Intervalle de vérification du watchdog (secondes)
 intervalle_verification = 5

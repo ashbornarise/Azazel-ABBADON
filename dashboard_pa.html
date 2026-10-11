@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rex Clemens Capital</title>
+<style>
+  :root { --bg:#0d1117; --s:#161b22; --b:#21262d; --fg:#c9d1d9; --fg2:#8b949e; --hi:#e6edf3; --g:#3fb950; --r:#f85149; --y:#d29922; --bl:#58a6ff; }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--fg);padding:16px}
+  .top{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--b);margin-bottom:14px}
+  .top h1{font-size:15px;color:var(--hi)} .top small{color:var(--fg2);font-size:11px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
+  .c{background:var(--s);border:1px solid var(--b);border-radius:6px;padding:12px}
+  .cl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--fg2);margin-bottom:4px}
+  .cv{font-size:20px;font-weight:700;color:var(--hi);font-variant-numeric:tabular-nums}
+  .cs{font-size:10px;color:var(--fg2);margin-top:2px}
+  .green{color:var(--g)} .red{color:var(--r)} .yellow{color:var(--y)}
+  .badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
+  .badge-g{background:rgba(63,185,80,.15);color:var(--g)}
+  .badge-r{background:rgba(248,81,73,.15);color:var(--r)}
+  .badge-y{background:rgba(210,153,34,.15);color:var(--y)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:8px 10px;font-size:11px;color:var(--fg2);text-transform:uppercase;border-bottom:1px solid var(--b)}
+  td{padding:8px 10px;border-bottom:1px solid var(--b)} tr:last-child td{border-bottom:none}
+  .section{font-size:13px;font-weight:600;color:var(--hi);margin:18px 0 8px}
+  .footer{text-align:center;padding:20px 0;color:var(--fg2);font-size:10px}
+  @media(max-width:600px){.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div><h1>Rex Clemens Capital</h1><small>Analyse quotidienne</small></div>
+  <div id="date" style="font-size:11px;color:var(--fg2)"></div>
+</div>
+
+<div class="grid" id="resume"></div>
+
+<div class="section">Signaux du jour</div>
+<div class="c">
+  <table>
+    <thead><tr><th>Actif</th><th>Prix</th><th>Signal</th><th>Exposition</th><th>Sharpe ML</th><th>Sharpe B&H</th><th>ML gagne?</th></tr></thead>
+    <tbody id="signaux"></tbody>
+  </table>
+</div>
+
+<div class="footer">Aucun argent reel &middot; Simulation uniquement &middot; Rafraichissement toutes les 60s</div>
+
+<script>
+async function load() {
+  try {
+    const r = await fetch('/api/etat');
+    const d = await r.json();
+    if (d.error) { document.getElementById('resume').innerHTML = `<div class="c"><div class="cv">${d.error}</div></div>`; return; }
+
+    document.getElementById('date').textContent = 'Derniere analyse : ' + d.date;
+
+    document.getElementById('resume').innerHTML = `
+      <div class="c"><div class="cl">Actifs suivis</div><div class="cv">${d.actifs.length}</div></div>
+      <div class="c"><div class="cl">Signal ACHAT</div><div class="cv green">${d.nb_achat}</div></div>
+      <div class="c"><div class="cl">Signal CASH</div><div class="cv red">${d.nb_cash}</div></div>
+      <div class="c"><div class="cl">Signal NEUTRE</div><div class="cv yellow">${d.nb_neutre}</div></div>
+    `;
+
+    let html = '';
+    for (const a of d.actifs) {
+      const bc = a.decision === 'ACHAT' ? 'g' : a.decision === 'CASH' ? 'r' : 'y';
+      const gagne = a.sharpe_ml > a.sharpe_bh ? '<span class="green">OUI</span>' : '<span class="red">NON</span>';
+      html += `<tr>
+        <td style="color:var(--hi);font-weight:600">${a.nom}<br><span style="font-size:10px;color:var(--fg2)">${a.symbole}</span></td>
+        <td>${a.prix.toLocaleString('fr-FR')} $</td>
+        <td><span class="badge badge-${bc}">${a.decision}</span></td>
+        <td>${(a.exposition*100).toFixed(0)}%</td>
+        <td>${a.sharpe_ml}</td>
+        <td>${a.sharpe_bh}</td>
+        <td>${gagne}</td>
+      </tr>`;
+    }
+    document.getElementById('signaux').innerHTML = html;
+  } catch(e) {}
+}
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

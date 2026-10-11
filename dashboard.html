@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rex Clemens Capital — Live</title>
+<style>
+  :root {
+    --bg: #0d1117; --s: #161b22; --b: #21262d;
+    --fg: #c9d1d9; --fg2: #8b949e; --hi: #e6edf3;
+    --g: #3fb950; --r: #f85149; --y: #d29922; --bl: #58a6ff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--fg); padding: 16px; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--b); margin-bottom: 14px; }
+  .top h1 { font-size: 15px; color: var(--hi); }
+  .top small { color: var(--fg2); font-size: 11px; }
+  .live { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--g); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--g); animation: p 2s infinite; }
+  @keyframes p { 50% { opacity: .3; } }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .c { background: var(--s); border: 1px solid var(--b); border-radius: 6px; padding: 10px 12px; }
+  .cl { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--fg2); margin-bottom: 4px; }
+  .cv { font-size: 20px; font-weight: 700; color: var(--hi); font-variant-numeric: tabular-nums; }
+  .cs { font-size: 10px; color: var(--fg2); margin-top: 2px; }
+  .green { color: var(--g); } .red { color: var(--r); } .yellow { color: var(--y); }
+
+  .chart-box { background: var(--s); border: 1px solid var(--b); border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+  .chart-title { font-size: 11px; color: var(--fg2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .chart-title span { color: var(--hi); font-weight: 600; }
+  canvas { width: 100%; height: 180px; display: block; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 6px 8px; font-size: 10px; color: var(--fg2); text-transform: uppercase; border-bottom: 1px solid var(--b); }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--b); }
+  tr:last-child td { border-bottom: none; }
+
+  .log { font-family: 'Consolas', monospace; font-size: 11px; max-height: 280px; overflow-y: auto; }
+  .log-row { display: grid; grid-template-columns: 80px 50px 50px 60px 60px 70px 60px; gap: 4px; padding: 4px 0; border-bottom: 1px solid var(--b); align-items: center; }
+  .log-row:last-child { border-bottom: none; }
+  @media (max-width: 600px) { .log-row { grid-template-columns: 70px 40px 40px 50px 50px 1fr; font-size: 10px; } }
+
+  .progress { width: 100%; height: 4px; background: var(--b); border-radius: 2px; margin-bottom: 14px; }
+  .progress-fill { height: 100%; background: var(--bl); border-radius: 2px; transition: width .3s; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-g { background: rgba(63,185,80,.15); color: var(--g); }
+  .badge-r { background: rgba(248,81,73,.15); color: var(--r); }
+  .badge-y { background: rgba(210,153,34,.15); color: var(--y); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } .grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); } }
+
+  .section { font-size: 12px; font-weight: 600; color: var(--hi); margin: 14px 0 6px; }
+  .footer { text-align: center; padding: 16px 0; color: var(--fg2); font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <h1>Rex Clemens Capital</h1>
+    <small>Agent ML — simulation live</small>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="jour-info" style="font-size:11px;color:var(--fg2)"></span>
+    <span class="live" id="status"><span class="dot"></span> Live</span>
+  </div>
+</div>
+
+<div class="progress"><div class="progress-fill" id="progress"></div></div>
+
+<!-- Solde + performance -->
+<div class="grid">
+  <div class="c"><div class="cl">Solde</div><div class="cv" id="v-capital">—</div><div class="cs">Depart : 100 $</div></div>
+  <div class="c"><div class="cl">Investi</div><div class="cv" id="v-investi">—</div><div class="cs" id="v-expo">Exposition</div></div>
+  <div class="c"><div class="cl">Signal</div><div class="cv" id="v-signal" style="font-size:15px">—</div><div class="cs" id="v-etat"></div></div>
+  <div class="c"><div class="cl">Drawdown</div><div class="cv" id="v-dd">—</div><div class="cs">Seuil : -10%</div></div>
+</div>
+
+<!-- Trades stats -->
+<div class="grid">
+  <div class="c"><div class="cl">Trades</div><div class="cv" id="v-trades">—</div><div class="cs" id="v-winloss"></div></div>
+  <div class="c"><div class="cl">Taux reussite</div><div class="cv" id="v-winrate">—</div><div class="cs">Gagnants / Total</div></div>
+  <div class="c"><div class="cl">Gains</div><div class="cv green" id="v-gains">—</div><div class="cs">Total cumule</div></div>
+  <div class="c"><div class="cl">Pertes</div><div class="cv red" id="v-pertes">—</div><div class="cs">Total cumule</div></div>
+  <div class="c"><div class="cl">Rendement</div><div class="cv" id="v-rdt">—</div><div class="cs" id="v-sharpe"></div></div>
+  <div class="c"><div class="cl">Pire DD</div><div class="cv" id="v-piredd">—</div><div class="cs">Historique</div></div>
+</div>
+
+<!-- Graphique equite -->
+<div class="chart-box">
+  <div class="chart-title"><span>Courbe d'equite ($)</span><span id="legend" style="font-weight:400;font-size:10px"></span></div>
+  <canvas id="chart-equity" height="180"></canvas>
+</div>
+
+<div class="two-col">
+  <div class="chart-box">
+    <div class="chart-title"><span>Exposition ML (%)</span></div>
+    <canvas id="chart-expo" height="140"></canvas>
+  </div>
+  <div class="chart-box">
+    <div class="chart-title"><span>Prix du marche</span></div>
+    <canvas id="chart-prix" height="140"></canvas>
+  </div>
+</div>
+
+<!-- Journal des positions -->
+<div class="section">Positions de l'agent (derniers trades)</div>
+<div class="c">
+  <div class="log">
+    <div class="log-row" style="font-weight:600;color:var(--fg2);border-bottom:1px solid var(--b)">
+      <span>Date</span><span>Action</span><span>Signal</span><span>Expo</span><span>Montant</span><span>Capital</span><span>P&L</span>
+    </div>
+    <div id="journal"></div>
+  </div>
+</div>
+
+<!-- Regles -->
+<div class="section">Regles de survie</div>
+<div class="c" style="margin-bottom:10px">
+  <table>
+    <thead><tr><th>Regle</th><th>Valeur</th><th>Seuil</th><th></th></tr></thead>
+    <tbody id="regles-body"></tbody>
+  </table>
+</div>
+
+<div class="footer">Aucun argent reel &middot; Simulation educative &middot; Phase 3/5</div>
+
+<script>
+const API = '/api/etat';
+let lastJour = -1;
+
+async function refresh() {
+  try {
+    const r = await fetch(API);
+    const d = await r.json();
+    update(d);
+  } catch(e) {}
+}
+
+function update(d) {
+  if (d.jour === lastJour) return;
+  lastJour = d.jour;
+
+  const pct = d.total_jours > 0 ? (d.jour / d.total_jours * 100) : 0;
+  document.getElementById('progress').style.width = pct + '%';
+  document.getElementById('jour-info').textContent = `Jour ${d.jour} / ${d.total_jours}`;
+
+  // Solde
+  document.getElementById('v-capital').textContent = d.capital.toFixed(2) + ' $';
+  document.getElementById('v-capital').className = 'cv ' + (d.capital >= d.capital_initial ? 'green' : 'red');
+
+  // Investi
+  document.getElementById('v-investi').textContent = (d.montant_investi || 0).toFixed(2) + ' $';
+  document.getElementById('v-expo').textContent = `${(d.exposition_ml * 100).toFixed(0)}% du compte`;
+
+  // Signal
+  const sigC = d.dernier_signal === 'ACHAT' ? 'g' : d.dernier_signal === 'CASH' ? 'r' : 'y';
+  document.getElementById('v-signal').innerHTML = `<span class="badge badge-${sigC}">${d.dernier_signal}</span>`;
+  document.getElementById('v-etat').textContent = d.etat;
+
+  // DD
+  document.getElementById('v-dd').textContent = d.drawdown.toFixed(1) + '%';
+  document.getElementById('v-dd').className = 'cv ' + (d.drawdown > -3 ? 'green' : d.drawdown > -7 ? 'yellow' : 'red');
+
+  // Trades
+  document.getElementById('v-trades').textContent = d.nb_trades;
+  const w = d.trades_gagnants || 0, l = d.trades_perdants || 0;
+  document.getElementById('v-winloss').textContent = `${w} gagnants / ${l} perdants`;
+
+  // Win rate
+  const total = w + l;
+  const wr = total > 0 ? (w / total * 100).toFixed(1) : '—';
+  document.getElementById('v-winrate').textContent = wr + (total > 0 ? '%' : '');
+  document.getElementById('v-winrate').className = 'cv ' + (total > 0 && w/total >= 0.5 ? 'green' : total > 0 ? 'red' : '');
+
+  // Gains / Pertes
+  document.getElementById('v-gains').textContent = '+' + (d.gain_total || 0).toFixed(2) + ' $';
+  document.getElementById('v-pertes').textContent = '-' + (d.perte_totale || 0).toFixed(2) + ' $';
+
+  // Rendement
+  document.getElementById('v-rdt').textContent = (d.rendement >= 0 ? '+' : '') + d.rendement + '%';
+  document.getElementById('v-rdt').className = 'cv ' + (d.rendement >= 0 ? 'green' : 'red');
+  document.getElementById('v-sharpe').textContent = `Sharpe : ${d.sharpe}`;
+
+  document.getElementById('v-piredd').textContent = d.pire_dd + '%';
+  document.getElementById('v-piredd').className = 'cv red';
+
+  // Status
+  const st = document.getElementById('status');
+  if (d.termine) { st.innerHTML = '<span style="color:var(--fg2)">Termine</span>'; }
+
+  // Charts
+  if (d.equity && d.equity.length > 2) {
+    drawLine('chart-equity', [
+      { data: d.equity, color: '#58a6ff', label: 'ML' },
+      { data: d.equity_bh, color: '#8b949e', label: 'Buy&Hold' },
+      { data: d.equity_ma, color: '#d29922', label: 'MA Cross' },
+    ]);
+    document.getElementById('legend').innerHTML =
+      '<span style="color:#58a6ff">--- ML</span> &nbsp; <span style="color:#8b949e">--- B&H</span> &nbsp; <span style="color:#d29922">--- MA</span>';
+
+    drawLine('chart-expo', [{ data: d.positions, color: '#3fb950' }]);
+    drawLine('chart-prix', [{ data: d.prix_liste, color: '#58a6ff' }]);
+  }
+
+  // Regles
+  const regles = d.regles_survie || {};
+  const noms = {
+    risque_trade: 'Risque/trade', levier: 'Levier', perte_jour: 'Perte jour',
+    drawdown: 'Drawdown', taille_pos: 'Taille pos.', donnees: 'Donnees', connexion: 'Connexion'
+  };
+  let rhtml = '';
+  for (const [k, v] of Object.entries(regles)) {
+    const badge = v.ok ? '<span class="badge badge-g">OK</span>' : '<span class="badge badge-r">ALERTE</span>';
+    rhtml += `<tr><td>${noms[k] || k}</td><td>${v.valeur}%</td><td>${v.seuil}%</td><td>${badge}</td></tr>`;
+  }
+  document.getElementById('regles-body').innerHTML = rhtml;
+
+  // Journal
+  const journal = d.journal || [];
+  let jhtml = '';
+  for (const e of journal.slice(-30).reverse()) {
+    const ac = e.action === 'OUVRE' ? 'color:var(--bl)' : 'color:var(--fg2)';
+    const tc = e.type === 'ACHAT' ? 'green' : e.type === 'CASH' ? 'red' : 'yellow';
+    const pnl = e.pnl ? (e.pnl >= 0 ? `<span class="green">+${e.pnl.toFixed(2)}</span>` : `<span class="red">${e.pnl.toFixed(2)}</span>`) : '—';
+    jhtml += `<div class="log-row">
+      <span style="color:var(--fg2)">${e.date}</span>
+      <span style="${ac};font-weight:600">${e.action}</span>
+      <span class="${tc}">${e.type}</span>
+      <span>${(e.expo*100).toFixed(0)}%</span>
+      <span>${e.montant.toFixed(2)} $</span>
+      <span>${e.capital.toFixed(2)} $</span>
+      <span>${pnl}</span>
+    </div>`;
+  }
+  document.getElementById('journal').innerHTML = jhtml || '<div style="color:var(--fg2);padding:8px">En attente du premier trade...</div>';
+}
+
+function drawLine(canvasId, series) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  let allMin = Infinity, allMax = -Infinity;
+  for (const s of series) { for (const v of s.data) { if (v < allMin) allMin = v; if (v > allMax) allMax = v; } }
+  const range = allMax - allMin || 1;
+  const pad = 4;
+
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+  for (let i = 1; i < 4; i++) { const y = pad + (H - 2*pad) * i / 4; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  for (const s of series) {
+    const n = s.data.length; if (n < 2) continue;
+    const step = Math.max(1, Math.floor(n / 500));
+    ctx.strokeStyle = s.color; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (let i = 0; i < n; i += step) {
+      const x = (i / (n - 1)) * W;
+      const y = pad + (1 - (s.data[i] - allMin) / range) * (H - 2 * pad);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    const xL = W, yL = pad + (1 - (s.data[n-1] - allMin) / range) * (H - 2*pad);
+    ctx.lineTo(xL, yL); ctx.stroke();
+  }
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+
+</body>
+</html>
