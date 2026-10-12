@@ -19,9 +19,14 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from src.ml.features import calculer_features
 from src.strategies.ml_strategy import MLStrategy
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score
 
 ETAT_PATH = Path("data/etat_realtime.json")
+ML_PATH = Path("data/etat_ml.json")
 PORT = 8777
 CAPITAL_INIT = 100.0
 
@@ -72,7 +77,31 @@ etat = {
     "actif": True,
 }
 
+ml_etat = {
+    "actifs": {},
+    "timestamp": "-",
+    "nb_features": 11,
+    "modele": "Random Forest",
+    "arbres": 50,
+    "walk_forward": True,
+    "taille_train": 252,
+    "pas_reentrain": 21,
+    "features_noms": [
+        "ret_1j", "ret_5j", "ret_20j",
+        "vol_10j", "vol_20j",
+        "ma_ratio_5_20", "ma_ratio_20_60",
+        "rsi_14", "dist_haut_20j",
+        "amplitude_5j", "skew_20j",
+    ],
+}
+
 lock = threading.Lock()
+
+
+def sauver_ml():
+    ML_PATH.parent.mkdir(exist_ok=True)
+    with open(ML_PATH, "w") as f:
+        json.dump(ml_etat, f, cls=NumpyEncoder)
 
 
 def sauver():
@@ -133,6 +162,96 @@ def fetch_prix():
         sauver()
 
 
+def analyser_ml_details(sym, nom, prix_serie, expo, decision):
+    try:
+        features = calculer_features(prix_serie)
+        masque = features.notna().all(axis=1)
+        feat_valid = features[masque]
+        if len(feat_valid) < 300:
+            return
+
+        ret_demain = prix_serie.pct_change().shift(-1)
+        cible = (ret_demain > 0).astype(float)
+
+        train_end = len(feat_valid) - 1
+        train_start = max(0, train_end - 252)
+        X_train = feat_valid.iloc[train_start:train_end]
+        y_train = cible.loc[X_train.index].dropna()
+        X_train = X_train.loc[y_train.index]
+
+        if len(X_train) < 100:
+            return
+
+        scaler = StandardScaler()
+        X_s = scaler.fit_transform(X_train)
+
+        clf = RandomForestClassifier(
+            n_estimators=50, max_depth=5,
+            min_samples_leaf=20, random_state=42, n_jobs=1,
+        )
+        clf.fit(X_s, y_train)
+
+        y_pred = clf.predict(X_s)
+        acc_train = round(accuracy_score(y_train, y_pred) * 100, 1)
+
+        test_size = min(63, len(feat_valid) - train_end)
+        if test_size > 10:
+            X_test = feat_valid.iloc[train_end - test_size:train_end]
+            y_test = cible.loc[X_test.index].dropna()
+            X_test = X_test.loc[y_test.index]
+            if len(X_test) > 5:
+                X_test_s = scaler.transform(X_test)
+                y_pred_test = clf.predict(X_test_s)
+                acc_test = round(accuracy_score(y_test, y_pred_test) * 100, 1)
+            else:
+                acc_test = None
+        else:
+            acc_test = None
+
+        importances = clf.feature_importances_
+        feat_names = list(features.columns)
+        feat_imp = {feat_names[i]: round(float(importances[i]) * 100, 1) for i in range(len(feat_names))}
+        feat_imp_sorted = dict(sorted(feat_imp.items(), key=lambda x: -x[1]))
+
+        last_row = feat_valid.iloc[-1]
+        feat_vals = {c: round(float(last_row[c]), 4) for c in features.columns}
+
+        X_last = scaler.transform(feat_valid.iloc[[-1]])
+        proba = clf.predict_proba(X_last)
+        proba_hausse = round(float(proba[0, 1]) * 100, 1) if proba.shape[1] == 2 else 50.0
+        proba_baisse = round(100 - proba_hausse, 1)
+
+        hist_expo = []
+        recent = signal if 'signal' in dir() else None
+        if recent is None:
+            sig_series = pd.Series(0.0, index=prix_serie.index)
+            sig_series.iloc[-1] = expo
+        n_recent = min(30, len(feat_valid))
+        recent_feat = feat_valid.iloc[-n_recent:]
+        recent_s = scaler.transform(recent_feat)
+        recent_proba = clf.predict_proba(recent_s)
+        hist_expo = [round(float(p[1]) * 100, 1) if len(p) == 2 else 50.0 for p in recent_proba]
+        hist_dates = [d.strftime("%m-%d") for d in recent_feat.index]
+
+        ml_etat["actifs"][sym] = {
+            "nom": nom,
+            "decision": decision,
+            "exposition": round(expo * 100, 1),
+            "proba_hausse": proba_hausse,
+            "proba_baisse": proba_baisse,
+            "accuracy_train": acc_train,
+            "accuracy_test": acc_test,
+            "jours_entrainement": len(X_train),
+            "feature_importance": feat_imp_sorted,
+            "feature_valeurs": feat_vals,
+            "historique_expo": hist_expo,
+            "historique_dates": hist_dates,
+            "prix": round(float(prix_serie.iloc[-1]), 2),
+        }
+    except Exception as e:
+        print(f"  [ML-DETAIL] {nom}: {e}")
+
+
 def analyser_et_trader():
     now = datetime.now(timezone.utc)
     etat["derniere_analyse"] = now.strftime("%Y-%m-%d %H:%M")
@@ -170,6 +289,9 @@ def analyser_et_trader():
                 "exposition": round(expo, 3),
                 "prix": round(prix_actuel, 2),
             }
+
+            analyser_ml_details(sym, nom, prix_serie, expo, decision)
+            sauver_ml()
 
             pos = etat["positions"].get(sym, {})
 
@@ -231,7 +353,9 @@ def analyser_et_trader():
 
     with lock:
         calculer_valeur_totale()
+        ml_etat["timestamp"] = now.strftime("%Y-%m-%d %H:%M:%S")
         sauver()
+        sauver_ml()
 
     total_pos = sum(1 for p in etat["positions"].values() if p.get("en_position"))
     print(f"  Positions ouvertes: {total_pos} | Capital: {etat['capital']:.2f}$ | PnL: {etat['pnl']:+.2f}$")
@@ -269,6 +393,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(data.encode())
+            return
+
+        if self.path == "/api/ml":
+            with lock:
+                try:
+                    data = ML_PATH.read_text()
+                except FileNotFoundError:
+                    data = "{}"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data.encode())
+            return
+
+        if self.path == "/ml":
+            self.path = "/dashboard_ml.html"
+            super().do_GET()
             return
 
         if self.path == "/" or self.path == "":
