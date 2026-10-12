@@ -157,9 +157,9 @@ def analyser_et_trader():
             signal = ml.calculer_exposition(prix_serie)
             expo = float(signal.iloc[-1])
 
-            if expo >= 0.6:
+            if expo >= 0.5:
                 decision = "ACHAT"
-            elif expo <= 0.4:
+            elif expo <= 0.35:
                 decision = "CASH"
             else:
                 decision = "NEUTRE"
