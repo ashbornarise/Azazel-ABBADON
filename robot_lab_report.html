@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rex Robot Lab — Rapport</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --blue:#58a6ff; --yellow:#d29922; --green:#3fb950; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:24px; background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { max-width:1440px; margin:auto; }
+    header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:22px; }
+    h1 { margin:0; font-size:24px; }
+    h2 { margin:0 0 12px; font-size:16px; }
+    p { color:var(--muted); margin:6px 0 0; }
+    a { color:var(--blue); }
+    .tag { border:1px solid #5a4312; background:#2b2110; color:#f0c674; border-radius:999px; padding:5px 10px; white-space:nowrap; }
+    .notice { padding:14px 16px; background:#1c2128; border:1px solid var(--line); border-left:4px solid var(--yellow); border-radius:8px; margin-bottom:18px; }
+    .notice strong { color:#f0c674; }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:18px; }
+    .card,.panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+    .label { color:var(--muted); font-size:11px; letter-spacing:.06em; text-transform:uppercase; }
+    .value { margin-top:4px; font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; }
+    .sub { color:var(--muted); font-size:12px; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+    input,select { color:var(--text); background:#0d1117; border:1px solid var(--line); border-radius:6px; padding:9px 10px; }
+    input { flex:1; min-width:220px; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:8px; }
+    table { width:100%; border-collapse:collapse; min-width:900px; background:var(--panel); }
+    th,td { padding:9px 10px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { position:sticky; top:0; background:#1c2128; color:var(--muted); font-size:11px; text-transform:uppercase; }
+    tr:last-child td { border-bottom:0; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid var(--line); border-radius:999px; font-size:11px; white-space:nowrap; }
+    .pending { color:#f0c674; border-color:#5a4312; }
+    .hint { color:var(--muted); font-size:12px; }
+    .error { color:#ff7b72; }
+    footer { margin-top:16px; color:var(--muted); font-size:12px; }
+    @media(max-width:650px) { body { padding:14px; } header { display:block; } .tag { display:inline-block; margin-top:10px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Rex Robot Lab</h1>
+      <p>Inventaire et suivi des simulations individuelles</p>
+    </div>
+    <span class="tag">En préparation — aucun résultat de backtest</span>
+  </header>
+
+  <section class="notice">
+    <strong>Les simulations attendent les historiques M1/ticks.</strong>
+    <div>Les performances restent vides tant que les robots ne sont pas testés. Les marchés et alertes affichés ci-dessous sont des indices tirés des noms de fichiers, à confirmer dans MT4/MT5.</div>
+  </section>
+
+  <section class="cards" aria-label="Résumé">
+    <div class="card"><div class="label">Robots suivis</div><div class="value" id="total">—</div><div class="sub">Fichiers exécutables compilés</div></div>
+    <div class="card"><div class="label">MT5</div><div class="value" id="mt5">—</div><div class="sub">Fichiers .ex5</div></div>
+    <div class="card"><div class="label">MT4</div><div class="value" id="mt4">—</div><div class="sub">Fichiers .ex4</div></div>
+    <div class="card"><div class="label">Tests terminés</div><div class="value">0</div><div class="sub">Aucun résultat enregistré</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Catalogue de test</h2>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Rechercher un nom, marché ou identifiant" aria-label="Rechercher">
+      <select id="platform" aria-label="Filtrer par plateforme"><option value="">Toutes les plateformes</option><option>MT5</option><option>MT4</option></select>
+      <a href="rex_alpha/robot_test_matrix.csv" download style="align-self:center">Télécharger la matrice CSV</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Fichier</th><th>Plateforme</th><th>Marché supposé</th><th>Indice de risque par nom</th><th>État</th><th>Profit net</th><th>Drawdown max</th><th>Profit factor</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="9">Chargement du catalogue…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="hint" id="count"></p>
+  </section>
+
+  <footer>Source : matrice locale des robots. Aucun fichier .ex4/.ex5 n’est exécuté par cette page.</footer>
+</main>
+<script>
+  function parseCsv(text) {
+    text = text.replace(/^\uFEFF/, "");
+    const records = [];
+    let row = [], cell = "", quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quoted) {
+        if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (c === '"') quoted = false;
+        else cell += c;
+      } else if (c === '"') quoted = true;
+      else if (c === ',') { row.push(cell); cell = ""; }
+      else if (c === '\n') { row.push(cell.replace(/\r$/, "")); records.push(row); row = []; cell = ""; }
+      else cell += c;
+    }
+    if (cell.length || row.length) { row.push(cell.replace(/\r$/, "")); records.push(row); }
+    const headers = records.shift() || [];
+    return records.filter(r => r.some(v => v !== "")).map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] || ""])));
+  }
+  const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let robots = [];
+  function render() {
+    const query = document.getElementById('search').value.trim().toLocaleLowerCase('fr');
+    const platform = document.getElementById('platform').value;
+    const filtered = robots.filter(r => (!platform || r.Plateforme === platform) && (!query || [r.ID,r.Nom,r.Marche_suppose,r.Indice_risque_nom].join(' ').toLocaleLowerCase('fr').includes(query)));
+    document.getElementById('rows').innerHTML = filtered.length ? filtered.map(r => `<tr>
+      <td>${escapeHtml(r.ID)}</td><td>${escapeHtml(r.Nom)}</td><td>${escapeHtml(r.Plateforme)}</td>
+      <td>${escapeHtml(r.Marche_suppose)}</td><td class="hint">${escapeHtml(r.Indice_risque_nom)}</td>
+      <td><span class="pill pending">${escapeHtml(r.Statut)}</span></td>
+      <td>—</td><td>—</td><td>—</td></tr>`).join('') : '<tr><td colspan="9">Aucun robot ne correspond au filtre.</td></tr>';
+    document.getElementById('count').textContent = `${filtered.length} affiché(s) sur ${robots.length}.`;
+  }
+  fetch('rex_alpha/robot_test_matrix.csv').then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); }).then(text => {
+    robots = parseCsv(text);
+    document.getElementById('total').textContent = robots.length;
+    document.getElementById('mt5').textContent = robots.filter(r => r.Plateforme === 'MT5').length;
+    document.getElementById('mt4').textContent = robots.filter(r => r.Plateforme === 'MT4').length;
+    render();
+  }).catch(error => { document.getElementById('rows').innerHTML = `<tr><td colspan="9" class="error">Impossible de charger la matrice : ${escapeHtml(error.message)}</td></tr>`; });
+  document.getElementById('search').addEventListener('input', render);
+  document.getElementById('platform').addEventListener('change', render);
+</script>
+</body>
+</html>
