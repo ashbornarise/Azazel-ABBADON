@@ -19,7 +19,7 @@
 <body>
 <main>
   <header>
-    <div><h1>Rex Alpha · Paper Live</h1><div class="muted">Signaux quotidiens, cotations intraday et portefeuille virtuel</div></div>
+    <div><h1>Rex Alpha · Paper Live</h1><div class="muted">Paper trading multi-horizon · 1 min, 5 min, 1 h et journalier</div></div>
     <div><span class="badge paper">SIMULATION · AUCUN ORDRE RÉEL</span> <span class="badge" id="feed-status">Connexion…</span></div>
   </header>
   <section class="notice"><strong>Source : Yahoo Finance via yfinance.</strong>
@@ -33,16 +33,17 @@
     <div class="card"><div class="label">Cash disponible</div><div class="value" id="cash">—</div></div>
     <div class="card"><div class="label">Positions virtuelles</div><div class="value" id="position-count">0</div><div class="muted" id="quote-time"></div></div>
   </section>
+  <section class="panel" style="margin-bottom:12px"><h2>Portefeuilles par horizon</h2><div class="table-wrap"><table><thead><tr><th>Horizon</th><th>Capital virtuel</th><th>PnL</th><th>Positions</th><th>Signal récent</th></tr></thead><tbody id="timeframes"><tr><td colspan="5" class="muted">Initialisation des horizons.</td></tr></tbody></table></div><div class="muted" style="margin-top:8px">Capital total réparti en quatre parts égales; chaque horizon simule ses propres ordres.</div></section>
   <section class="grid">
     <div class="panel"><div class="panel-head"><h2 id="price-title">Cours intraday</h2><select id="symbol-select" aria-label="Choisir un actif"></select></div><canvas id="price-chart"></canvas></div>
     <div class="panel small-chart"><div class="panel-head"><h2>Valeur du portefeuille</h2><span class="muted">USD</span></div><canvas id="equity-chart"></canvas></div>
   </section>
-  <section class="panel" style="margin-bottom:12px"><h2>Signaux Rex Alpha</h2><div class="table-wrap"><table><thead><tr><th>Symbole</th><th>Dernier cours</th><th>Score</th><th>Décision</th><th>Signal calculé sur</th><th>État données</th></tr></thead><tbody id="signals"><tr><td colspan="6" class="muted">En attente des données.</td></tr></tbody></table></div></section>
+  <section class="panel" style="margin-bottom:12px"><h2>Signaux Rex Alpha</h2><div class="table-wrap"><table><thead><tr><th>Horizon</th><th>Symbole</th><th>Dernier cours</th><th>Score</th><th>Décision</th><th>Bougie signal</th><th>État données</th></tr></thead><tbody id="signals"><tr><td colspan="7" class="muted">En attente des données.</td></tr></tbody></table></div></section>
   <section class="grid">
-    <div class="panel"><h2>Positions virtuelles</h2><div class="table-wrap"><table><thead><tr><th>Symbole</th><th>Quantité</th><th>Entrée</th><th>Cours</th><th>PnL latent</th></tr></thead><tbody id="positions"><tr><td colspan="5" class="muted">Aucune position.</td></tr></tbody></table></div></div>
-    <div class="panel"><h2>Dernières opérations simulées</h2><div class="table-wrap"><table><thead><tr><th>Heure</th><th>Actif</th><th>Action</th><th>Cours</th></tr></thead><tbody id="trades"><tr><td colspan="4" class="muted">Aucun ordre virtuel.</td></tr></tbody></table></div></div>
+    <div class="panel"><h2>Positions virtuelles</h2><div class="table-wrap"><table><thead><tr><th>Horizon</th><th>Symbole</th><th>Quantité</th><th>Entrée</th><th>Cours</th><th>PnL latent</th></tr></thead><tbody id="positions"><tr><td colspan="6" class="muted">Aucune position.</td></tr></tbody></table></div></div>
+    <div class="panel"><h2>Dernières opérations simulées</h2><div class="table-wrap"><table><thead><tr><th>Heure</th><th>Horizon</th><th>Actif</th><th>Action</th><th>Cours</th></tr></thead><tbody id="trades"><tr><td colspan="5" class="muted">Aucun ordre virtuel.</td></tr></tbody></table></div></div>
   </section>
-  <footer>Les signaux Rex Alpha sont évalués sur la dernière séance journalière clôturée. Le cours intraday sert au suivi et au paper trading.</footer>
+  <footer>Les stratégies 1 min, 5 min, 1 h et journalière sont simulées séparément. Une décision est prise à la clôture d’une bougie complète; aucun ordre réel n’est envoyé.</footer>
 </main>
 <script>
   const $=id=>document.getElementById(id);
@@ -66,9 +67,11 @@
     const newest=Object.values(d.prices||{}).map(p=>p.timestamp).filter(Boolean).sort().at(-1);$('quote-time').textContent=newest?'Dernière cotation : '+new Date(newest).toLocaleTimeString('fr-FR'):'Aucune cotation';
     const names=Object.keys(d.prices||{}),select=$('symbol-select'),selected=select.value;select.innerHTML=names.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');if(names.includes(selected))select.value=selected;
     const sym=select.value||names[0];const quote=d.prices?.[sym];$('price-title').textContent=sym?`${sym} · ${money(quote?.price)}`:'Cours intraday';draw($('price-chart'),quote?.history||[],'#58a6ff',money);draw($('equity-chart'),d.equity||[],'#3fb950',money);
-    const signalRows=Object.entries(d.signals||{}).map(([s,x])=>{const q=d.prices?.[s];const dec=x.decision||'EN ATTENTE';return `<tr><td>${esc(s)}</td><td>${q?money(q.price):'—'}</td><td>${x.score_alpha==null?'—':Number(x.score_alpha).toFixed(1)}</td><td><span class="decision">${esc(dec)}</span></td><td>${esc(x.date_signal||'—')}</td><td>${esc(x.message||x.bar_status||'OK')}</td></tr>`}).join('');$('signals').innerHTML=signalRows||'<tr><td colspan="6" class="muted">Signaux en cours de calcul.</td></tr>';
-    $('positions').innerHTML=(d.positions||[]).map(p=>`<tr><td>${esc(p.symbol)}</td><td>${Number(p.quantity).toFixed(4)}</td><td>${money(p.entry_price)}</td><td>${money(p.price)}</td><td class="${p.unrealized_pnl>=0?'green':'red'}">${money(p.unrealized_pnl)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Aucune position.</td></tr>';
-    $('trades').innerHTML=(d.trades||[]).slice(-8).reverse().map(t=>`<tr><td>${new Date(t.timestamp).toLocaleTimeString('fr-FR')}</td><td>${esc(t.symbol)}</td><td>${esc(t.action)}</td><td>${money(t.price)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Aucun ordre virtuel.</td></tr>';
+    const labels={'1m':'1 min','5m':'5 min','1h':'1 h','1d':'Journalier'};
+    const timeframeRows=Object.entries(d.timeframe_portfolios||{}).map(([tf,p])=>{const sigs=Object.values(d.signals_by_timeframe?.[tf]||{});const latest=sigs.find(x=>x.decision&&x.decision!=='BENCHMARK');return `<tr><td>${labels[tf]||esc(tf)}</td><td>${money(p.capital)}</td><td class="${p.pnl_total>=0?'green':'red'}">${money(p.pnl_total)}</td><td>${p.nb_positions}</td><td>${esc(latest?.decision||'En attente')}</td></tr>`}).join('');$('timeframes').innerHTML=timeframeRows||'<tr><td colspan="5" class="muted">Initialisation des horizons.</td></tr>';
+    const signalRows=Object.entries(d.signals_by_timeframe||{}).flatMap(([tf,items])=>Object.entries(items||{}).map(([s,x])=>{const q=d.prices?.[s];const dec=x.decision||'EN ATTENTE';return `<tr><td>${labels[tf]||esc(tf)}</td><td>${esc(s)}</td><td>${q?money(q.price):'—'}</td><td>${x.score_alpha==null?'—':Number(x.score_alpha).toFixed(1)}</td><td><span class="decision">${esc(dec)}</span></td><td>${esc(x.date_signal||'—')}</td><td>${esc(x.message||x.bar_status||'OK')}</td></tr>`})).join('');$('signals').innerHTML=signalRows||'<tr><td colspan="7" class="muted">Signaux en cours de calcul.</td></tr>';
+    $('positions').innerHTML=(d.positions||[]).map(p=>`<tr><td>${labels[p.timeframe]||esc(p.timeframe||'—')}</td><td>${esc(p.symbol)}</td><td>${Number(p.quantity).toFixed(4)}</td><td>${money(p.entry_price)}</td><td>${money(p.price)}</td><td class="${p.unrealized_pnl>=0?'green':'red'}">${money(p.unrealized_pnl)}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">Aucune position.</td></tr>';
+    $('trades').innerHTML=(d.trades||[]).slice(-8).reverse().map(t=>`<tr><td>${new Date(t.timestamp).toLocaleTimeString('fr-FR')}</td><td>${labels[t.timeframe]||esc(t.timeframe||'—')}</td><td>${esc(t.symbol)}</td><td>${esc(t.action)}</td><td>${money(t.price)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Aucun ordre virtuel.</td></tr>';
   }
   async function load(){try{const response=await fetch('/api/rex-alpha/state',{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);render(await response.json())}catch(e){$('status-message').textContent='API indisponible : '+e.message;$('feed-status').textContent='Déconnecté';$('feed-status').className='badge error'}}
   $('symbol-select').addEventListener('change',()=>state&&render(state));window.addEventListener('resize',()=>state&&render(state));load();setInterval(load,5000);

@@ -10,14 +10,14 @@ Le robot ne prédit pas le prix. Il estime avec prudence, limite ce qu'il risque
 
 ## Rex Alpha paper trading
 
-Le tableau de bord Rex Alpha affiche les cours intraday, les scores calculés sur les dernières séances clôturées, la courbe du portefeuille virtuel et les opérations simulées.
+Le tableau de bord Rex Alpha compare quatre portefeuilles virtuels indépendants : 1 minute, 5 minutes, 1 heure et journalier. Les 100 000 $ de départ sont répartis en quatre parts égales. Les décisions sont évaluées sur des bougies clôturées; un ordre est simulé seulement si le signal Alpha le déclenche.
 
 ```powershell
 pip install pandas numpy scikit-learn yfinance tzdata
 python run_live.py
 ```
 
-Ouvre ensuite `http://localhost:8777/`. La première veille suit `AAPL`, `MSFT`, `NVDA` et `SPY`; la liste se remplace avec `REX_ALPHA_LIVE_SYMBOLS` (symboles séparés par des virgules). Les bougies d'une minute viennent de Yahoo Finance via `yfinance` et sont interrogées toutes les 60 secondes. Leur fraîcheur dépend du fournisseur; le tableau affiche l'horodatage reçu. Les ordres restent dans le simulateur virtuel. L'ancien tableau de bord est accessible sur `/legacy`.
+Ouvre ensuite `http://localhost:8777/`. La première veille suit `AAPL`, `MSFT`, `NVDA` et `SPY`; la liste se remplace avec `REX_ALPHA_LIVE_SYMBOLS` (symboles séparés par des virgules). Les bougies d'une minute viennent de Yahoo Finance via `yfinance` et sont interrogées toutes les 60 secondes; les horizons 5 minutes et 1 heure sont agrégés à partir de ces données et de leur historique respectif. La disponibilité et le délai des cours dépendent du fournisseur. Les ordres restent dans quatre simulateurs virtuels séparés. L'ancien tableau de bord est accessible sur `/legacy`.
 
 ## Architecture
 

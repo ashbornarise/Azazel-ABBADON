@@ -32,6 +32,8 @@ from rex_alpha.storage import RexDB
 NY = ZoneInfo("America/New_York")
 DEFAULT_SYMBOLS = ("AAPL", "MSFT", "NVDA", "SPY")
 STATE_PATH = Path("data/rex_alpha/live_paper_state.json")
+INTRADAY_TIMEFRAMES = {"1m": "1min", "5m": "5min", "1h": "1h"}
+PAPER_SLEEVES = ("1m", "5m", "1h", "1d")
 
 
 def _utc_now() -> datetime:
@@ -39,7 +41,7 @@ def _utc_now() -> datetime:
 
 
 class RexAlphaLivePaper:
-    """Fetch minute quotes, evaluate completed daily bars, and paper trade."""
+    """Paper trade Rex Alpha independently on minute, 5-minute, hourly and daily bars."""
 
     def __init__(
         self,
@@ -62,13 +64,30 @@ class RexAlphaLivePaper:
         self.state_path = Path(state_path)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.config = RexConfig()
+        self.sleeve_capital = self.config.capital_initial / len(PAPER_SLEEVES)
+        self.combined_peak = self.config.capital_initial
         self.session_id = _utc_now().strftime("%Y%m%dT%H%M%SZ")
         session_database = database_path or Path(
-            f"data/rex_alpha/live_paper_{self.session_id}.db"
+            f"data/rex_alpha/live_paper_{self.session_id}_1d.db"
         )
         self.db = RexDB(session_database)
-        self.risk = RiskManager(self.config)
-        self.simulator = ExecutionSimulator(self.db, self.risk, self.config)
+        daily_config = RexConfig(capital_initial=self.sleeve_capital)
+        self.risk = RiskManager(daily_config)
+        self.simulator = ExecutionSimulator(self.db, self.risk, daily_config)
+        self.simulators = {"1d": self.simulator}
+        self.databases = {"1d": self.db}
+        for timeframe in PAPER_SLEEVES:
+            if timeframe == "1d":
+                continue
+            frame_db = RexDB(
+                f"data/rex_alpha/live_paper_{self.session_id}_{timeframe}.db"
+            )
+            frame_config = RexConfig(capital_initial=self.sleeve_capital)
+            frame_risk = RiskManager(frame_config)
+            self.databases[timeframe] = frame_db
+            self.simulators[timeframe] = ExecutionSimulator(
+                frame_db, frame_risk, frame_config
+            )
         self.stagnation = StagnationDetector()
         self.reversal = ReversalDetector()
         self.fundamentals = FundamentalAnalyzer()
@@ -76,14 +95,26 @@ class RexAlphaLivePaper:
         self.lock = threading.RLock()
         self.daily: dict[str, pd.DataFrame] = {}
         self.last_daily_refresh = 0.0
+        self.hourly: dict[str, pd.DataFrame] = {}
+        self.last_hourly_refresh = 0.0
+        self.intraday: dict[str, pd.DataFrame] = {}
         self.quality: dict[str, dict] = {}
         self.last_signal_day: dict[str, str] = {}
         self.paper_decision_day: dict[str, str] = {}
+        self.last_timeframe_bar: dict[str, dict[str, str]] = {
+            tf: {} for tf in PAPER_SLEEVES
+        }
+        self.paper_timeframe_decision: dict[str, dict[str, str]] = {
+            tf: {} for tf in PAPER_SLEEVES
+        }
         self.fundamentals_cache: dict[str, dict] = {}
         self.last_fundamentals_at: dict[str, float] = {}
         self.price_history: dict[str, list[list]] = {s: [] for s in self.symbols}
         self.equity_history: list[list] = []
         self.signals: dict[str, dict] = {}
+        self.timeframe_signals: dict[str, dict[str, dict]] = {
+            tf: {} for tf in PAPER_SLEEVES
+        }
         self.trade_history: list[dict] = []
         self.last_prices: dict[str, float] = {}
         self.last_quote_times: dict[str, str] = {}
@@ -91,6 +122,8 @@ class RexAlphaLivePaper:
         self.state: dict = {
             "mode": "PAPER",
             "session_id": self.session_id,
+            "timeframes": list(PAPER_SLEEVES),
+            "sleeve_capital": self.sleeve_capital,
             "status": "initialisation",
             "source": "Yahoo Finance via yfinance · bougies 1 minute",
             "poll_seconds": self.poll_seconds,
@@ -127,6 +160,7 @@ class RexAlphaLivePaper:
 
     def _update_once(self) -> None:
         self._refresh_daily_history()
+        self._refresh_hourly_history()
         quotes = self._fetch_intraday()
         now = _utc_now()
 
@@ -136,6 +170,11 @@ class RexAlphaLivePaper:
                 stamp = quote["timestamp"]
                 self.last_prices[symbol] = price
                 self.last_quote_times[symbol] = stamp
+                if "bars" in quote:
+                    self.intraday[symbol] = quote["bars"]
+                    self.hourly[symbol] = self._merge_intraday_hourly(
+                        self.hourly.get(symbol, pd.DataFrame()), quote["bars"]
+                    )
                 points = self.price_history.setdefault(symbol, [])
                 for point in quote.get("history", []):
                     if points and points[-1][0] == point[0]:
@@ -145,7 +184,10 @@ class RexAlphaLivePaper:
                 del points[:-500]
 
             self._evaluate_new_daily_bars(now)
+            self.timeframe_signals["1d"] = dict(self.signals)
+            self._evaluate_intraday_bars(now)
             self._apply_daily_signals(now)
+            self._apply_intraday_signals(now)
             self._manage_open_positions(now)
 
             fresh_prices = {
@@ -154,8 +196,13 @@ class RexAlphaLivePaper:
                 if self._quote_is_fresh(symbol, now)
             }
             if fresh_prices:
-                self.simulator.update_prix(fresh_prices)
-            portfolio = self.simulator.snapshot()
+                for simulator in self.simulators.values():
+                    simulator.update_prix(fresh_prices)
+            sleeve_snapshots = {
+                timeframe: simulator.snapshot()
+                for timeframe, simulator in self.simulators.items()
+            }
+            portfolio = self._combined_snapshot(sleeve_snapshots)
             equity_point = [now.isoformat(), portfolio["capital"]]
             self.equity_history.append(equity_point)
             del self.equity_history[:-1000]
@@ -173,24 +220,27 @@ class RexAlphaLivePaper:
                 message = "La source n’a pas encore fourni de bougie intraday récente."
 
             positions = []
-            for symbol, position in self.simulator.positions.items():
-                if position.get("quantite", 0) <= 0:
-                    continue
-                price = self.last_prices.get(symbol, position["prix_moyen"])
-                positions.append({
-                    "symbol": symbol,
-                    "quantity": round(position["quantite"], 6),
-                    "entry_price": round(position["prix_moyen"], 4),
-                    "price": round(price, 4),
-                    "unrealized_pnl": round(
-                        position["quantite"] * (price - position["prix_moyen"]), 2
-                    ),
-                })
+            for timeframe, simulator in self.simulators.items():
+                for symbol, position in simulator.positions.items():
+                    if position.get("quantite", 0) <= 0:
+                        continue
+                    price = self.last_prices.get(symbol, position["prix_moyen"])
+                    positions.append({
+                        "timeframe": timeframe,
+                        "symbol": symbol,
+                        "quantity": round(position["quantite"], 6),
+                        "entry_price": round(position["prix_moyen"], 4),
+                        "price": round(price, 4),
+                        "unrealized_pnl": round(
+                            position["quantite"] * (price - position["prix_moyen"]), 2
+                        ),
+                    })
 
             self.state.update({
                 "status": status,
                 "message": message,
                 "capital_initial": self.config.capital_initial,
+                "sleeve_capital": self.sleeve_capital,
                 "capital": portfolio["capital"],
                 "cash": portfolio["cash"],
                 "pnl": portfolio["pnl_total"],
@@ -206,6 +256,8 @@ class RexAlphaLivePaper:
                     for symbol in self.last_prices
                 },
                 "signals": self.signals,
+                "signals_by_timeframe": self.timeframe_signals,
+                "timeframe_portfolios": sleeve_snapshots,
                 "positions": positions,
                 "trades": self.trade_history[-100:],
                 "equity": self.equity_history,
@@ -217,6 +269,23 @@ class RexAlphaLivePaper:
                 "errors": self.errors,
             })
             self._save_state()
+
+    def _combined_snapshot(self, sleeves: dict[str, dict]) -> dict:
+        capital = round(sum(s["capital"] for s in sleeves.values()), 2)
+        cash = round(sum(s["cash"] for s in sleeves.values()), 2)
+        pnl = round(capital - self.config.capital_initial, 2)
+        self.combined_peak = max(self.combined_peak, capital)
+        return {
+            "capital": capital,
+            "cash": cash,
+            "pnl_total": pnl,
+            "pnl_pct": round(pnl / self.config.capital_initial * 100, 2),
+            "drawdown": round(
+                (capital - self.combined_peak) / self.combined_peak * 100,
+                2,
+            ) if self.combined_peak else 0,
+            "nb_positions": sum(s["nb_positions"] for s in sleeves.values()),
+        }
 
     def _refresh_daily_history(self) -> None:
         now = time.monotonic()
@@ -244,10 +313,28 @@ class RexAlphaLivePaper:
                 }
         self.last_daily_refresh = now
 
+    def _refresh_hourly_history(self) -> None:
+        now = time.monotonic()
+        if now - self.last_hourly_refresh < 3600:
+            return
+        for symbol in self.symbols:
+            if symbol == self.config.benchmark:
+                continue
+            try:
+                history = yf.Ticker(symbol).history(
+                    period="2y", interval="1h", auto_adjust=True, timeout=20
+                )
+                if not history.empty and "Close" in history:
+                    self.hourly[symbol] = history.dropna(subset=["Close"])
+            except Exception as exc:
+                self.errors.append(f"{symbol} 1h: {type(exc).__name__}: {exc}")
+                self.errors = self.errors[-5:]
+        self.last_hourly_refresh = now
+
     def _fetch_intraday(self) -> dict[str, dict]:
         data = yf.download(
             tickers=" ".join(self.symbols),
-            period="1d",
+            period="5d",
             interval="1m",
             group_by="ticker",
             auto_adjust=True,
@@ -270,6 +357,7 @@ class RexAlphaLivePaper:
             result[symbol] = {
                 "price": float(closes.iloc[-1]),
                 "timestamp": stamp.to_pydatetime().astimezone(timezone.utc).isoformat(),
+                "bars": frame,
                 "history": [
                     [
                         index.to_pydatetime().astimezone(timezone.utc).isoformat()
@@ -281,6 +369,146 @@ class RexAlphaLivePaper:
                 ],
             }
         return result
+
+    @staticmethod
+    def _closed_bars(frame: pd.DataFrame, interval: str, now: datetime) -> pd.DataFrame:
+        if frame.empty or "Close" not in frame:
+            return frame.iloc[0:0]
+        closes_at = {
+            "1min": pd.Timedelta(minutes=1),
+            "5min": pd.Timedelta(minutes=5),
+            "1h": pd.Timedelta(hours=1),
+        }[interval]
+        end = now.astimezone(NY)
+        if frame.index.tz is None:
+            frame = frame.copy()
+            frame.index = frame.index.tz_localize(NY)
+        return frame.loc[frame.index + closes_at <= end]
+
+    @staticmethod
+    def _merge_intraday_hourly(
+        history: pd.DataFrame, minute_bars: pd.DataFrame
+    ) -> pd.DataFrame:
+        recent = minute_bars.resample(
+            "1h", origin="start_day", offset="30min", label="left", closed="left"
+        ).agg({
+            "Open": "first", "High": "max", "Low": "min",
+            "Close": "last", "Volume": "sum",
+        }).dropna(subset=["Close"])
+        combined = pd.concat([history, recent])
+        return combined.loc[~combined.index.duplicated(keep="last")].sort_index()
+
+    def _evaluate_intraday_bars(self, now: datetime) -> None:
+        for timeframe, interval in INTRADAY_TIMEFRAMES.items():
+            for symbol in self.symbols:
+                if symbol == self.config.benchmark:
+                    self.timeframe_signals[timeframe][symbol] = {
+                        "decision": "BENCHMARK",
+                        "message": "Référence de marché; aucun ordre simulé.",
+                    }
+                    continue
+                if timeframe == "1h":
+                    frame = self.hourly.get(symbol, pd.DataFrame())
+                else:
+                    source = self.intraday.get(symbol, pd.DataFrame())
+                    if source.empty:
+                        continue
+                    if timeframe == "1m":
+                        frame = source
+                    else:
+                        frame = source.resample(
+                            interval, label="left", closed="left"
+                        ).agg({
+                            "Open": "first", "High": "max", "Low": "min",
+                            "Close": "last", "Volume": "sum",
+                        }).dropna(subset=["Close"])
+
+                completed = self._closed_bars(frame, interval, now)
+                if len(completed) < 252:
+                    self.timeframe_signals[timeframe][symbol] = {
+                        "decision": "HISTORIQUE INSUFFISANT",
+                        "message": f"{len(completed)}/252 bougies clôturées pour {timeframe}.",
+                        "date_signal": str(completed.index[-1]) if not completed.empty else None,
+                    }
+                    continue
+                bar_id = completed.index[-1].isoformat()
+                if self.last_timeframe_bar[timeframe].get(symbol) == bar_id:
+                    continue
+
+                prices = completed["Close"]
+                volumes = completed["Volume"] if "Volume" in completed else None
+                quality = self._get_fundamentals(symbol)
+                if not quality.get("ok"):
+                    self.timeframe_signals[timeframe][symbol] = {
+                        "decision": "DONNÉES FONDAMENTALES INDISPONIBLES",
+                        "date_signal": bar_id,
+                        "message": quality.get("raison", "source fondamentale indisponible"),
+                    }
+                    continue
+
+                stagnation = self.stagnation.analyser(prices, volumes)
+                reversal = self.reversal.analyser(prices, volumes)
+                candidate = self.scorer.scorer(
+                    symbol, float(prices.iloc[-1]), stagnation, quality, reversal
+                )
+                signal = asdict(candidate)
+                signal.update({
+                    "timeframe": timeframe,
+                    "date_signal": bar_id,
+                    "bar_status": "dernière bougie clôturée",
+                    "message": candidate.raison,
+                })
+                self.timeframe_signals[timeframe][symbol] = signal
+                self.last_timeframe_bar[timeframe][symbol] = bar_id
+                self.databases[timeframe].insert_signal(
+                    symbol, candidate.decision, candidate.score_alpha,
+                    candidate.details or {}, f"rex-alpha-live-{timeframe}-0.1",
+                )
+
+    def _apply_intraday_signals(self, now: datetime) -> None:
+        if not self._is_us_regular_session(now):
+            return
+        for timeframe in INTRADAY_TIMEFRAMES:
+            simulator = self.simulators[timeframe]
+            for symbol, signal in self.timeframe_signals[timeframe].items():
+                signal_bar = signal.get("date_signal")
+                if not signal_bar or self.paper_timeframe_decision[timeframe].get(symbol) == signal_bar:
+                    continue
+                if not self._quote_is_fresh(symbol, now):
+                    continue
+                score = signal.get("score_alpha")
+                price = self.last_prices.get(symbol)
+                if score is None or not price:
+                    continue
+
+                position = simulator.positions.get(symbol, {})
+                if float(position.get("quantite", 0)) > 0:
+                    if score < self.scorer.SEUIL_CANDIDAT:
+                        result = simulator.vendre(
+                            symbol, price, f"{timeframe}: score Alpha sous le seuil candidat"
+                        )
+                        if result.get("ok"):
+                            self._record_trade(
+                                symbol, "VENTE", price, result, signal_bar, timeframe
+                            )
+                elif signal.get("decision") == "ACHAT_RECOMMANDE":
+                    account = simulator.get_state()
+                    config = simulator.config
+                    amount = min(
+                        account.capital * config.max_risque_par_trade_pct / 100,
+                        account.capital * config.max_poids_par_titre,
+                        account.cash * 0.95,
+                    ) * min(float(score) / 100, 1.0)
+                    if amount > 0:
+                        result = simulator.acheter(
+                            symbol, price, round(amount, 2),
+                            f"{timeframe}: score Alpha {float(score):.1f} sur bougie clôturée",
+                        )
+                        if result.get("ok"):
+                            self._record_trade(
+                                symbol, "ACHAT", price, result, signal_bar, timeframe
+                            )
+                self.paper_timeframe_decision[timeframe][symbol] = signal_bar
 
     @staticmethod
     def _ticker_frame(data: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -415,22 +643,31 @@ class RexAlphaLivePaper:
     def _manage_open_positions(self, now: datetime) -> None:
         if not self._is_us_regular_session(now):
             return
-        for symbol, position in list(self.simulator.positions.items()):
-            quantity = float(position.get("quantite", 0))
-            price = self.last_prices.get(symbol)
-            if quantity <= 0 or price is None or not self._quote_is_fresh(symbol, now):
-                continue
-            stop_price = float(position["prix_moyen"]) * (
-                1 - self.config.stop_loss_pct / 100
-            )
-            if price <= stop_price:
-                result = self.simulator.vendre(symbol, price, "stop virtuel")
-                if result.get("ok"):
-                    self._record_trade(symbol, "VENTE", price, result, "stop intraday")
+        for timeframe, simulator in self.simulators.items():
+            for symbol, position in list(simulator.positions.items()):
+                quantity = float(position.get("quantite", 0))
+                price = self.last_prices.get(symbol)
+                if quantity <= 0 or price is None or not self._quote_is_fresh(symbol, now):
+                    continue
+                stop_price = float(position["prix_moyen"]) * (
+                    1 - simulator.config.stop_loss_pct / 100
+                )
+                if price <= stop_price:
+                    result = simulator.vendre(
+                        symbol, price, f"{timeframe}: stop virtuel"
+                    )
+                    if result.get("ok"):
+                        self._record_trade(
+                            symbol, "VENTE", price, result, "stop intraday", timeframe
+                        )
 
-    def _record_trade(self, symbol: str, action: str, price: float, result: dict, signal_day: str) -> None:
+    def _record_trade(
+        self, symbol: str, action: str, price: float, result: dict,
+        signal_day: str, timeframe: str = "1d",
+    ) -> None:
         self.trade_history.append({
             "timestamp": _utc_now().isoformat(),
+            "timeframe": timeframe,
             "signal_day": signal_day,
             "symbol": symbol,
             "action": action,
