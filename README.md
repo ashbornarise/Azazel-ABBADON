@@ -19,6 +19,17 @@ python run_live.py
 
 Ouvre ensuite `http://localhost:8777/`. La première veille suit `AAPL`, `MSFT`, `NVDA` et `SPY`; la liste se remplace avec `REX_ALPHA_LIVE_SYMBOLS` (symboles séparés par des virgules). Les bougies d'une minute viennent de Yahoo Finance via `yfinance` et sont interrogées toutes les 60 secondes; les horizons 5 minutes et 1 heure sont agrégés à partir de ces données et de leur historique respectif. La disponibilité et le délai des cours dépendent du fournisseur. Les ordres restent dans quatre simulateurs virtuels séparés. L'ancien tableau de bord est accessible sur `/legacy`.
 
+### Robot Lab — recherche et comparaison
+
+Le lien **Robot Lab** ouvre `/robot-lab`. Le catalogue présente les 114 EA compilés recensés, avec des familles seulement supposées à partir de leurs noms. Pour calculer les comparaisons des stratégies Python et les prévisions walk-forward à partir du cache ou de Yahoo Finance, lance sur le serveur :
+
+```bash
+source venv/bin/activate
+python -m rex_alpha.robot_lab.research --refresh
+```
+
+Les EA `.ex4`/`.ex5` ne sont pas exécutés par ce banc Python. Leurs rapports doivent venir du Strategy Tester MetaTrader, avec l'historique et les paramètres adaptés à chaque robot. Le dashboard ne les marque pas comme testés sans résultats réels.
+
 ## Architecture
 
 ```

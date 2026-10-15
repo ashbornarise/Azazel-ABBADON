@@ -27,6 +27,7 @@ ETAT_PATH = Path("data/etat_robot.json")
 ETAT_DAILY_PATH = Path("data/etat_daily.json")
 JOURNAL_DAILY_PATH = Path("data/journal_daily.jsonl")
 REX_ALPHA_LIVE_PATH = Path("data/rex_alpha/live_paper_state.json")
+ROBOT_LAB_DATA_PATH = Path("data/rex_alpha/robot_lab_dashboard.json")
 PORT = 8777
 
 
@@ -267,6 +268,39 @@ def simulation_agent():
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/api/robot-lab/state":
+            try:
+                data = ROBOT_LAB_DATA_PATH.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                from rex_alpha.robot_lab.research import (
+                    NATIVE_STRATEGIES,
+                    RESOURCE_PACKS,
+                    _load_catalog,
+                )
+
+                catalog = _load_catalog()
+                data = json.dumps({
+                    "status": "not_run",
+                    "message": "Lancez `python -m rex_alpha.robot_lab.research --refresh` sur le serveur pour calculer le banc et les prévisions.",
+                    "compiled_robot_count": len(catalog),
+                    "compiled_robots_tested": 0,
+                    "native_results": [],
+                    "native_strategies": [
+                        {**strategy, "assets_tested": 0, "positive_assets": 0}
+                        for strategy in NATIVE_STRATEGIES
+                    ],
+                    "forecasts": [],
+                    "compiled_robots": catalog,
+                    "resource_packs": RESOURCE_PACKS,
+                    "limitations": [],
+                })
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data.encode("utf-8"))
+            return
+
         if self.path == "/api/rex-alpha/state":
             try:
                 data = REX_ALPHA_LIVE_PATH.read_text(encoding="utf-8")
@@ -333,6 +367,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if self.path == "/daily":
             self.path = "/dashboard_pa.html"
+            super().do_GET()
+            return
+
+        if self.path in {"/lab", "/lab/", "/robot-lab", "/robot-lab/"}:
+            self.path = "/rex_alpha/robot_lab/dashboard.html"
             super().do_GET()
             return
 

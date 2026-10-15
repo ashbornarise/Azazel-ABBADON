@@ -22,6 +22,7 @@ data/*.csv
 data/*.parquet
 data/*.json
 data/rex_alpha/*.db
+data/rex_alpha/robot_lab_dashboard.json
 data/rex_alpha/live_paper_state.json
 data/rex_alpha/live_paper_state.tmp
 !data/.gitkeep
