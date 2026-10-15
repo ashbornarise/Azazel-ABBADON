@@ -1,11 +1,10 @@
 """
 Rex Clemens Capital — Simulation live
 ═════════════════════════════════════
-Lance le robot en simulation : l'agent ML trade jour par jour,
-le dashboard web se rafraichit en temps reel.
+Lance Rex Alpha avec cours intraday et portefeuille virtuel.
 
-Usage : py run_live.py
-Puis ouvrir http://localhost:8777 dans le navigateur.
+Usage : python run_live.py
+Ouvrir http://localhost:8777 dans le navigateur; /legacy garde l'ancien dashboard.
 """
 
 import http.server
@@ -27,6 +26,7 @@ from src.survie import ModuleSurvie
 ETAT_PATH = Path("data/etat_robot.json")
 ETAT_DAILY_PATH = Path("data/etat_daily.json")
 JOURNAL_DAILY_PATH = Path("data/journal_daily.jsonl")
+REX_ALPHA_LIVE_PATH = Path("data/rex_alpha/live_paper_state.json")
 PORT = 8777
 
 
@@ -267,6 +267,33 @@ def simulation_agent():
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/api/rex-alpha/state":
+            try:
+                data = REX_ALPHA_LIVE_PATH.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                data = json.dumps({
+                    "mode": "PAPER",
+                    "status": "initialisation",
+                    "message": "Le moteur Rex Alpha Live démarre.",
+                    "capital_initial": 100_000,
+                    "capital": 100_000,
+                    "cash": 100_000,
+                    "pnl": 0,
+                    "pnl_pct": 0,
+                    "drawdown": 0,
+                    "prices": {},
+                    "signals": {},
+                    "positions": [],
+                    "trades": [],
+                    "equity": [],
+                })
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data.encode("utf-8"))
+            return
+
         if self.path == "/api/etat":
             try:
                 data = ETAT_PATH.read_text()
@@ -309,8 +336,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
             return
 
-        if self.path == "/" or self.path == "":
+        if self.path in {"/legacy", "/legacy/"}:
             self.path = "/dashboard.html"
+            super().do_GET()
+            return
+
+        if self.path in {"/rex-alpha", "/rex-alpha/", "/"}:
+            self.path = "/rex_alpha/live_dashboard.html"
+            super().do_GET()
+            return
+
         super().do_GET()
 
     def log_message(self, format, *args):
@@ -318,21 +353,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main():
-    ETAT_PATH.parent.mkdir(exist_ok=True)
-    sauver_etat(etat_initial())
+    from rex_alpha.live_paper import RexAlphaLivePaper
 
-    server = http.server.HTTPServer(("", PORT), Handler)
-    t = threading.Thread(target=server.serve_forever, daemon=True)
-    t.start()
-    print(f"[SERVEUR] Dashboard live sur http://localhost:{PORT}")
-    print()
-
+    REX_ALPHA_LIVE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    live_paper = RexAlphaLivePaper()
+    threading.Thread(target=live_paper.run_forever, daemon=True).start()
+    server = http.server.ThreadingHTTPServer(("", PORT), Handler)
+    print(f"[SERVEUR] Rex Alpha Paper Live : http://localhost:{PORT}/")
+    print(f"[SERVEUR] Ancien dashboard : http://localhost:{PORT}/legacy")
+    print("[DATA] Yahoo Finance via yfinance · bougies 1m · rafraîchissement 60s")
+    print("[ORDRES] Simulation virtuelle uniquement")
     try:
-        simulation_agent()
-        print("\n[SERVEUR] Simulation finie. Dashboard toujours actif (Ctrl+C pour quitter).")
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[SERVEUR] Arret.")
+        print("\n[SERVEUR] Arrêt Rex Alpha Paper Live.")
         server.shutdown()
 
 

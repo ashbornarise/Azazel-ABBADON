@@ -8,6 +8,17 @@ Le robot ne prédit pas le prix. Il estime avec prudence, limite ce qu'il risque
 
 > Un robot qui perd tout est mort ; un robot qui ne gagne pas peut encore apprendre.
 
+## Rex Alpha paper trading
+
+Le tableau de bord Rex Alpha affiche les cours intraday, les scores calculés sur les dernières séances clôturées, la courbe du portefeuille virtuel et les opérations simulées.
+
+```powershell
+pip install pandas numpy scikit-learn yfinance tzdata
+python run_live.py
+```
+
+Ouvre ensuite `http://localhost:8777/`. La première veille suit `AAPL`, `MSFT`, `NVDA` et `SPY`; la liste se remplace avec `REX_ALPHA_LIVE_SYMBOLS` (symboles séparés par des virgules). Les bougies d'une minute viennent de Yahoo Finance via `yfinance` et sont interrogées toutes les 60 secondes. Leur fraîcheur dépend du fournisseur; le tableau affiche l'horodatage reçu. Les ordres restent dans le simulateur virtuel. L'ancien tableau de bord est accessible sur `/legacy`.
+
 ## Architecture
 
 ```

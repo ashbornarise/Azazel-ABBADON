@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rex Alpha · Paper Live</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0d1117;--panel:#161b22;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--blue:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922}
+    *{box-sizing:border-box}body{margin:0;padding:20px;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,"Segoe UI",sans-serif}main{max-width:1500px;margin:auto}
+    header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}h1{font-size:22px;margin:0}h2{font-size:14px;margin:0 0 10px}.muted{color:var(--muted);font-size:12px}
+    .badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:11px}.paper{color:#f0c674;background:#2b2110;border-color:#5a4312}.live{color:var(--green)}.stale{color:var(--yellow)}.error{color:var(--red)}
+    .notice{background:#1c2128;border:1px solid var(--line);border-left:4px solid var(--yellow);border-radius:8px;padding:12px 14px;margin-bottom:14px}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px}.label{color:var(--muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase}.value{font-size:23px;font-weight:700;font-variant-numeric:tabular-nums}.green{color:var(--green)}.red{color:var(--red)}
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}select{background:#0d1117;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px}
+    canvas{width:100%;height:260px;display:block}.small-chart canvas{height:190px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:700px;font-size:12px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:10px;text-transform:uppercase}tr:last-child td{border:0}.decision{border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:10px;white-space:nowrap}
+    footer{padding:16px 0;text-align:center;color:var(--muted);font-size:11px}@media(max-width:850px){body{padding:12px}.grid{grid-template-columns:1fr}canvas{height:220px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Rex Alpha · Paper Live</h1><div class="muted">Signaux quotidiens, cotations intraday et portefeuille virtuel</div></div>
+    <div><span class="badge paper">SIMULATION · AUCUN ORDRE RÉEL</span> <span class="badge" id="feed-status">Connexion…</span></div>
+  </header>
+  <section class="notice"><strong>Source : Yahoo Finance via yfinance.</strong>
+    <span id="source-note"> Les données sont des bougies d’une minute, interrogées périodiquement; leur disponibilité et leur délai ne sont pas garantis.</span>
+    <div class="muted" id="status-message">Initialisation…</div>
+  </section>
+  <section class="cards">
+    <div class="card"><div class="label">Capital virtuel</div><div class="value" id="capital">—</div><div class="muted" id="initial-capital"></div></div>
+    <div class="card"><div class="label">PnL total</div><div class="value" id="pnl">—</div><div class="muted" id="pnl-pct"></div></div>
+    <div class="card"><div class="label">Drawdown</div><div class="value" id="drawdown">—</div></div>
+    <div class="card"><div class="label">Cash disponible</div><div class="value" id="cash">—</div></div>
+    <div class="card"><div class="label">Positions virtuelles</div><div class="value" id="position-count">0</div><div class="muted" id="quote-time"></div></div>
+  </section>
+  <section class="grid">
+    <div class="panel"><div class="panel-head"><h2 id="price-title">Cours intraday</h2><select id="symbol-select" aria-label="Choisir un actif"></select></div><canvas id="price-chart"></canvas></div>
+    <div class="panel small-chart"><div class="panel-head"><h2>Valeur du portefeuille</h2><span class="muted">USD</span></div><canvas id="equity-chart"></canvas></div>
+  </section>
+  <section class="panel" style="margin-bottom:12px"><h2>Signaux Rex Alpha</h2><div class="table-wrap"><table><thead><tr><th>Symbole</th><th>Dernier cours</th><th>Score</th><th>Décision</th><th>Signal calculé sur</th><th>État données</th></tr></thead><tbody id="signals"><tr><td colspan="6" class="muted">En attente des données.</td></tr></tbody></table></div></section>
+  <section class="grid">
+    <div class="panel"><h2>Positions virtuelles</h2><div class="table-wrap"><table><thead><tr><th>Symbole</th><th>Quantité</th><th>Entrée</th><th>Cours</th><th>PnL latent</th></tr></thead><tbody id="positions"><tr><td colspan="5" class="muted">Aucune position.</td></tr></tbody></table></div></div>
+    <div class="panel"><h2>Dernières opérations simulées</h2><div class="table-wrap"><table><thead><tr><th>Heure</th><th>Actif</th><th>Action</th><th>Cours</th></tr></thead><tbody id="trades"><tr><td colspan="4" class="muted">Aucun ordre virtuel.</td></tr></tbody></table></div></div>
+  </section>
+  <footer>Les signaux Rex Alpha sont évalués sur la dernière séance journalière clôturée. Le cours intraday sert au suivi et au paper trading.</footer>
+</main>
+<script>
+  const $=id=>document.getElementById(id);
+  const money=v=>Number(v||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' $';
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let state=null;
+  function draw(canvas,points,color,format=(v)=>v.toFixed(2)){
+    const ctx=canvas.getContext('2d'), rect=canvas.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+    canvas.width=Math.max(1,rect.width*dpr);canvas.height=Math.max(1,rect.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+    const w=rect.width,h=rect.height,p={l:62,r:12,t:12,b:24},cw=w-p.l-p.r,ch=h-p.t-p.b;ctx.clearRect(0,0,w,h);
+    const values=points.map(x=>Number(x[1])).filter(Number.isFinite);if(!values.length)return;
+    let lo=Math.min(...values),hi=Math.max(...values);if(lo===hi){lo-=1;hi+=1}const gap=(hi-lo)*.08;lo-=gap;hi+=gap;
+    ctx.font='10px system-ui';ctx.textAlign='right';ctx.fillStyle='#8b949e';ctx.strokeStyle='#30363d';
+    for(let i=0;i<=4;i++){const y=p.t+ch*i/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();ctx.fillText(format(hi-(hi-lo)*i/4),p.l-6,y+3)}
+    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();values.forEach((v,i)=>{const x=p.l+i*Math.max(0,cw-1)/Math.max(1,values.length-1),y=p.t+ch*(1-(v-lo)/(hi-lo));i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+    ctx.fillStyle='#8b949e';ctx.textAlign='left';ctx.fillText(points[0][0]?.slice(11,16)||'',p.l,h-5);ctx.textAlign='right';ctx.fillText(points.at(-1)[0]?.slice(11,16)||'',w-p.r,h-5);
+  }
+  function render(d){
+    state=d;const pnl=$('pnl');$('capital').textContent=money(d.capital);$('initial-capital').textContent='Départ : '+money(d.capital_initial);pnl.textContent=(d.pnl>=0?'+':'')+money(d.pnl);pnl.className='value '+(d.pnl>=0?'green':'red');$('pnl-pct').textContent=(d.pnl_pct>=0?'+':'')+Number(d.pnl_pct||0).toFixed(2)+' %';$('drawdown').textContent=Number(d.drawdown||0).toFixed(2)+' %';$('cash').textContent=money(d.cash);$('position-count').textContent=(d.positions||[]).length;
+    $('status-message').textContent=d.message||'';const fresh=Object.values(d.prices||{}).some(p=>p.timestamp&&(Date.now()-new Date(p.timestamp).getTime())<180000);$('feed-status').textContent=fresh?'Cours récents':'Cours retardés / marché fermé';$('feed-status').className='badge '+(fresh?'live':'stale');
+    const newest=Object.values(d.prices||{}).map(p=>p.timestamp).filter(Boolean).sort().at(-1);$('quote-time').textContent=newest?'Dernière cotation : '+new Date(newest).toLocaleTimeString('fr-FR'):'Aucune cotation';
+    const names=Object.keys(d.prices||{}),select=$('symbol-select'),selected=select.value;select.innerHTML=names.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');if(names.includes(selected))select.value=selected;
+    const sym=select.value||names[0];const quote=d.prices?.[sym];$('price-title').textContent=sym?`${sym} · ${money(quote?.price)}`:'Cours intraday';draw($('price-chart'),quote?.history||[],'#58a6ff',money);draw($('equity-chart'),d.equity||[],'#3fb950',money);
+    const signalRows=Object.entries(d.signals||{}).map(([s,x])=>{const q=d.prices?.[s];const dec=x.decision||'EN ATTENTE';return `<tr><td>${esc(s)}</td><td>${q?money(q.price):'—'}</td><td>${x.score_alpha==null?'—':Number(x.score_alpha).toFixed(1)}</td><td><span class="decision">${esc(dec)}</span></td><td>${esc(x.date_signal||'—')}</td><td>${esc(x.message||x.bar_status||'OK')}</td></tr>`}).join('');$('signals').innerHTML=signalRows||'<tr><td colspan="6" class="muted">Signaux en cours de calcul.</td></tr>';
+    $('positions').innerHTML=(d.positions||[]).map(p=>`<tr><td>${esc(p.symbol)}</td><td>${Number(p.quantity).toFixed(4)}</td><td>${money(p.entry_price)}</td><td>${money(p.price)}</td><td class="${p.unrealized_pnl>=0?'green':'red'}">${money(p.unrealized_pnl)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Aucune position.</td></tr>';
+    $('trades').innerHTML=(d.trades||[]).slice(-8).reverse().map(t=>`<tr><td>${new Date(t.timestamp).toLocaleTimeString('fr-FR')}</td><td>${esc(t.symbol)}</td><td>${esc(t.action)}</td><td>${money(t.price)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Aucun ordre virtuel.</td></tr>';
+  }
+  async function load(){try{const response=await fetch('/api/rex-alpha/state',{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);render(await response.json())}catch(e){$('status-message').textContent='API indisponible : '+e.message;$('feed-status').textContent='Déconnecté';$('feed-status').className='badge error'}}
+  $('symbol-select').addEventListener('change',()=>state&&render(state));window.addEventListener('resize',()=>state&&render(state));load();setInterval(load,5000);
+</script>
+</body>
+</html>

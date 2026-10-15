@@ -17,7 +17,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Dependances
-pip install pandas numpy scikit-learn yfinance flask
+pip install pandas numpy scikit-learn yfinance flask tzdata
 
 # Dossier data
 mkdir -p data/cache
