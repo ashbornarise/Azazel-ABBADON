@@ -63,6 +63,10 @@ body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:12px
 .chart-pos{position:absolute;bottom:4px;right:8px;font-size:9px;padding:2px 6px;border-radius:2px;z-index:2}
 .chart-pos.long{background:rgba(13,138,64,.12);color:var(--bull);border:1px solid rgba(13,138,64,.3)}
 .chart-pos.none{display:none}
+.chart-panel.minimized .chart-body{display:none}
+.chart-panel.minimized{min-height:0!important;height:auto!important}
+.chart-min-btn{background:none;border:1px solid var(--rule);color:var(--fg2);font-family:var(--font);font-size:10px;padding:1px 6px;cursor:pointer;border-radius:2px;margin-left:4px;line-height:1.2}
+.chart-min-btn:hover{background:var(--bg3);color:var(--fg)}
 .side-panel{width:260px;background:var(--bg2);border-left:1px solid var(--rule);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
 .side-panel .sp-header{padding:8px 10px;border-bottom:1px solid var(--rule);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--gold)}
 .side-panel .sp-section{padding:8px 10px;border-bottom:1px solid var(--rule)}
@@ -641,7 +645,7 @@ function buildCharts(){
     const tf=sp?sp.tf:'5m';
     const tfMap={'1m':'1d','5m':'5d','15m':'5d','1h':'1mo','1d':'6mo'};
     const panel=document.createElement('div');panel.className='chart-panel';
-    panel.innerHTML=`<div class="chart-header"><div style="display:flex;align-items:center;gap:8px"><select class="sym-select" onchange="changeSym(${i},this.value)">${ALL_SYMS.map(a=>`<option value="${a.s}" ${a.s===info.s?'selected':''}>${a.s}</option>`).join('')}</select><span class="price" id="price-${i}">--</span><span class="change" id="change-${i}"></span></div><div class="tf-btns">${['1m','5m','15m','1h','1d'].map(t=>`<button class="tf-btn ${t===tf?'active':''}" data-idx="${i}" data-tf="${t}" onclick="changeTF(${i},'${t}')">${t}</button>`).join('')}</div></div><div class="chart-body" id="body-${i}"><canvas id="canvas-${i}"></canvas><div class="chart-overlay"><div class="ohlc" id="ohlc-${i}"></div></div><div class="chart-pos none" id="pos-${i}"></div></div>`;
+    panel.innerHTML=`<div class="chart-header"><div style="display:flex;align-items:center;gap:8px"><select class="sym-select" onchange="changeSym(${i},this.value)">${ALL_SYMS.map(a=>`<option value="${a.s}" ${a.s===info.s?'selected':''}>${a.s}</option>`).join('')}</select><span class="price" id="price-${i}">--</span><span class="change" id="change-${i}"></span></div><div class="tf-btns">${['1m','5m','15m','1h','1d'].map(t=>`<button class="tf-btn ${t===tf?'active':''}" data-idx="${i}" data-tf="${t}" onclick="changeTF(${i},'${t}')">${t}</button>`).join('')}<button class="chart-min-btn" id="min-${i}" onclick="toggleMinimize(${i})" title="Reduire/Agrandir">_</button></div></div><div class="chart-body" id="body-${i}"><canvas id="canvas-${i}"></canvas><div class="chart-overlay"><div class="ohlc" id="ohlc-${i}"></div></div><div class="chart-pos none" id="pos-${i}"></div></div>`;
     grid.appendChild(panel);
     panels.push({sym:info.s,name:info.n,tf:tf,period:tfMap[tf]||'5d',candles:[],idx:i,cw:sp?(sp.cw||8):8,offset:sp?(sp.offset||0):0,dragging:false,dragStartX:0,dragStartOffset:0,mouseX:-1,mouseY:-1});
     setupChartInteraction(i);
@@ -701,6 +705,30 @@ function setupChartInteraction(idx){
 }
 function changeSym(idx,sym){const info=ALL_SYMS.find(a=>a.s===sym)||{s:sym,n:sym};panels[idx].sym=sym;panels[idx].name=info.n;panels[idx].offset=0;loadCandles(idx);saveState();}
 function changeTF(idx,tf){const tfMap={'1m':'1d','5m':'5d','15m':'5d','1h':'1mo','1d':'6mo'};panels[idx].tf=tf;panels[idx].period=tfMap[tf]||'5d';panels[idx].offset=0;document.querySelectorAll(`.tf-btn[data-idx="${idx}"]`).forEach(b=>b.classList.toggle('active',b.dataset.tf===tf));loadCandles(idx);saveState();}
+function toggleMinimize(idx){
+  const el=document.getElementById(`body-${idx}`).parentElement;
+  el.classList.toggle('minimized');
+  const btn=document.getElementById(`min-${idx}`);
+  btn.textContent=el.classList.contains('minimized')?'+':'_';
+  if(!el.classList.contains('minimized'))setTimeout(()=>drawChart(idx),50);
+}
+function focusChart(sym){
+  if(activeTab!=='charts'){document.querySelector('.tab[data-tab="charts"]').click();}
+  let found=panels.findIndex(p=>p.sym===sym);
+  if(found>=0){
+    const el=document.getElementById(`body-${found}`).parentElement;
+    if(el.classList.contains('minimized'))toggleMinimize(found);
+    el.style.outline='2px solid var(--gold)';el.style.outlineOffset='-2px';
+    el.scrollIntoView({behavior:'smooth',block:'nearest'});
+    setTimeout(()=>{el.style.outline='';el.style.outlineOffset='';},2000);
+  }else{
+    changeSym(0,sym);
+    const el=document.getElementById('body-0').parentElement;
+    if(el.classList.contains('minimized'))toggleMinimize(0);
+    el.style.outline='2px solid var(--gold)';el.style.outlineOffset='-2px';
+    setTimeout(()=>{el.style.outline='';el.style.outlineOffset='';},2000);
+  }
+}
 
 async function loadCandles(idx){
   const p=panels[idx];
@@ -760,11 +788,11 @@ async function loadState(){
   pe.className='sp-value '+(pnl>=0?'up':'down');
   document.getElementById('sp-capital').className='sp-value '+(pnl>=0?'up':'down');
   let pc=0,ph='';
-  if(etatGlobal.positions){for(const[sym,pos]of Object.entries(etatGlobal.positions)){if(!pos.en_position)continue;pc++;const sig=etatGlobal.signaux?etatGlobal.signaux[sym]:null;const prix=sig?sig.prix:pos.prix_entree;const pp=prix&&pos.prix_entree?((prix-pos.prix_entree)/pos.prix_entree*100):0;ph+=`<div class="sp-pos-row"><span style="font-weight:600">${sym}</span><span>${pos.montant_entree}$</span><span style="font-weight:600;color:${pp>=0?'var(--bull)':'var(--bear)'}">${pp>=0?'+':''}${pp.toFixed(2)}%</span></div>`;}}
+  if(etatGlobal.positions){for(const[sym,pos]of Object.entries(etatGlobal.positions)){if(!pos.en_position)continue;pc++;const sig=etatGlobal.signaux?etatGlobal.signaux[sym]:null;const prix=sig?sig.prix:pos.prix_entree;const pp=prix&&pos.prix_entree?((prix-pos.prix_entree)/pos.prix_entree*100):0;ph+=`<div class="sp-pos-row" onclick="focusChart('${sym}')" style="cursor:pointer"><span style="font-weight:600">${sym}</span><span>${pos.montant_entree}$</span><span style="font-weight:600;color:${pp>=0?'var(--bull)':'var(--bear)'}">${pp>=0?'+':''}${pp.toFixed(2)}%</span></div>`;}}
   document.getElementById('sp-positions').innerHTML=ph||'<div style="padding:10px;color:var(--fg2);font-size:11px">Aucune position</div>';
   document.getElementById('sp-pos-count').textContent=pc;
   const trades=(etatGlobal.trades||[]).slice(-10).reverse();
-  document.getElementById('sp-trades').innerHTML=trades.map(t=>{const cls=t.action==='ACHAT'?'buy':t.action==='STOP-LOSS'?'sl':'sell';return`<div class="sp-trade-row"><span class="${cls}">${t.action}</span><span>${t.sym||''}</span><span>${t.montant||''}$</span></div>`;}).join('');
+  document.getElementById('sp-trades').innerHTML=trades.map(t=>{const cls=t.action==='ACHAT'?'buy':t.action==='STOP-LOSS'?'sl':'sell';return`<div class="sp-trade-row" onclick="focusChart('${t.sym||''}')" style="cursor:pointer"><span class="${cls}">${t.action}</span><span>${t.sym||''}</span><span>${t.montant||''}$</span></div>`;}).join('');
   document.getElementById('status-text').textContent=`${etatGlobal.nb_actifs||0} actifs · ${(etatGlobal.trades||[]).length} trades · ${pc} positions · ${etatGlobal.derniere_maj||'--'}`;
   if(activeTab==='charts')panels.forEach((p,i)=>drawChart(i));
   }catch(e){document.getElementById('status-text').textContent='Erreur connexion';}
