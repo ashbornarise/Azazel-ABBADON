@@ -7,7 +7,7 @@
     { "source": "/mega", "destination": "/dashboard_mega.html" },
     { "source": "/ml", "destination": "/dashboard_ml.html" },
     { "source": "/old", "destination": "/dashboard_realtime.html" },
-    { "source": "/api/:path*", "destination": "http://34.71.20.144:8080/api/:path*" }
+    { "source": "/api/:path*", "destination": "http://34.71.20.144:8777/api/:path*" }
   ],
   "headers": [
     {
