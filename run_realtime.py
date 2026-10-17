@@ -15,6 +15,7 @@ import json
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -39,35 +40,47 @@ CAPITAL_INIT = 100.0
 TRADE_INTERVAL = 300  # 5 minutes
 
 ACTIFS = {
-    # Crypto majeurs
-    "BTC-USD": "Bitcoin",
-    "ETH-USD": "Ethereum",
-    "SOL-USD": "Solana",
-    "BNB-USD": "BNB",
-    "XRP-USD": "XRP",
-    "ADA-USD": "Cardano",
-    "AVAX-USD": "Avalanche",
-    "DOGE-USD": "Dogecoin",
-    "DOT-USD": "Polkadot",
-    "LINK-USD": "Chainlink",
-    "MATIC-USD": "Polygon",
-    "ATOM-USD": "Cosmos",
-    "UNI-USD": "Uniswap",
-    "LTC-USD": "Litecoin",
-    # Actions US tech
-    "MSFT": "Microsoft",
-    "AAPL": "Apple",
-    "NVDA": "Nvidia",
-    "TSLA": "Tesla",
-    "AMZN": "Amazon",
-    "META": "Meta",
-    "GOOGL": "Google",
-    "AMD": "AMD",
-    "NFLX": "Netflix",
-    "COIN": "Coinbase",
-    # Commodities
-    "GC=F": "Gold",
-    "SI=F": "Silver",
+    # === CRYPTO (30) ===
+    "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana",
+    "BNB-USD": "BNB", "XRP-USD": "XRP", "ADA-USD": "Cardano",
+    "AVAX-USD": "Avalanche", "DOGE-USD": "Dogecoin", "DOT-USD": "Polkadot",
+    "LINK-USD": "Chainlink", "MATIC-USD": "Polygon", "ATOM-USD": "Cosmos",
+    "UNI-USD": "Uniswap", "LTC-USD": "Litecoin", "NEAR-USD": "Near",
+    "APT-USD": "Aptos", "OP-USD": "Optimism", "ARB-USD": "Arbitrum",
+    "FIL-USD": "Filecoin", "ALGO-USD": "Algorand", "VET-USD": "VeChain",
+    "ICP-USD": "Internet Computer", "HBAR-USD": "Hedera", "FTM-USD": "Fantom",
+    "AAVE-USD": "Aave", "MKR-USD": "Maker", "GRT-USD": "The Graph",
+    "INJ-USD": "Injective", "TIA-USD": "Celestia", "SUI-USD": "Sui",
+    # === ACTIONS US TECH (20) ===
+    "MSFT": "Microsoft", "AAPL": "Apple", "NVDA": "Nvidia",
+    "TSLA": "Tesla", "AMZN": "Amazon", "META": "Meta",
+    "GOOGL": "Google", "AMD": "AMD", "NFLX": "Netflix",
+    "COIN": "Coinbase", "CRM": "Salesforce", "ORCL": "Oracle",
+    "UBER": "Uber", "SQ": "Block", "SHOP": "Shopify",
+    "PLTR": "Palantir", "SNOW": "Snowflake", "MU": "Micron",
+    "INTC": "Intel", "PYPL": "PayPal",
+    # === ACTIONS US FINANCE & SANTE (15) ===
+    "JPM": "JPMorgan", "BAC": "Bank of America", "GS": "Goldman Sachs",
+    "V": "Visa", "MA": "Mastercard", "BRK-B": "Berkshire",
+    "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer",
+    "ABBV": "AbbVie", "LLY": "Eli Lilly", "MRK": "Merck",
+    "DIS": "Disney", "KO": "Coca-Cola", "PEP": "PepsiCo",
+    # === ACTIONS EU (10) ===
+    "ASML": "ASML", "SAP": "SAP", "NVO": "Novo Nordisk",
+    "TTE": "TotalEnergies", "SNY": "Sanofi", "SHEL": "Shell",
+    "UL": "Unilever", "AZN": "AstraZeneca", "DEO": "Diageo",
+    "SPOT": "Spotify",
+    # === FOREX (15) ===
+    "EURUSD=X": "EUR/USD", "GBPUSD=X": "GBP/USD", "USDJPY=X": "USD/JPY",
+    "AUDUSD=X": "AUD/USD", "USDCAD=X": "USD/CAD", "USDCHF=X": "USD/CHF",
+    "NZDUSD=X": "NZD/USD", "EURJPY=X": "EUR/JPY", "GBPJPY=X": "GBP/JPY",
+    "EURGBP=X": "EUR/GBP", "EURCAD=X": "EUR/CAD", "AUDJPY=X": "AUD/JPY",
+    "USDMXN=X": "USD/MXN", "USDZAR=X": "USD/ZAR", "EURCHF=X": "EUR/CHF",
+    # === COMMODITIES & INDICES (10) ===
+    "GC=F": "Gold", "SI=F": "Silver", "CL=F": "Crude Oil",
+    "NG=F": "Natural Gas", "PL=F": "Platinum",
+    "^GSPC": "S&P 500", "^IXIC": "Nasdaq", "^DJI": "Dow Jones",
+    "^RUT": "Russell 2000", "^VIX": "VIX",
 }
 
 
@@ -267,17 +280,28 @@ def executer_stop_loss(sym, nom, prix):
     print(f"  [STOP-LOSS] {nom}: VENTE FORCEE a {prix:.2f} | PnL: {pnl:+.2f}$ | {raison}")
 
 
+def _fetch_un_prix(sym, nom):
+    try:
+        t = yf.Ticker(sym)
+        h = t.history(period="1d", interval="1m")
+        if h.empty:
+            h = t.history(period="5d", interval="5m")
+        if h.empty:
+            return None
+        return (sym, nom, float(h["Close"].iloc[-1]))
+    except Exception as e:
+        return None
+
+
 def fetch_prix():
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    for sym, nom in ACTIFS.items():
-        try:
-            t = yf.Ticker(sym)
-            h = t.history(period="1d", interval="1m")
-            if h.empty:
-                h = t.history(period="5d", interval="5m")
-            if h.empty:
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {executor.submit(_fetch_un_prix, sym, nom): (sym, nom) for sym, nom in ACTIFS.items()}
+        for future in as_completed(futures):
+            result = future.result()
+            if result is None:
                 continue
-            prix = float(h["Close"].iloc[-1])
+            sym, nom, prix = result
 
             if sym not in etat["signaux"]:
                 etat["signaux"][sym] = {"nom": nom, "decision": "ATTENTE", "exposition": 0, "prix": prix}
@@ -290,12 +314,11 @@ def fetch_prix():
                 etat["prix_historique"][sym] = etat["prix_historique"][sym][-300:]
 
             executer_stop_loss(sym, nom, prix)
-        except Exception as e:
-            print(f"  [PRIX] {sym}: {e}")
 
     with lock:
         calculer_valeur_totale()
         etat["timestamp"] = now
+        etat["nb_actifs"] = len(ACTIFS)
         ts = datetime.now(timezone.utc).strftime("%H:%M")
         etat["equity"].append(round(etat["capital"], 2))
         etat["timestamps_equity"].append(ts)
@@ -461,17 +484,28 @@ def analyser_et_trader():
         return
     etat["protection_active"] = ""
 
+    def _download_hist(sym):
+        try:
+            return (sym, yf.Ticker(sym).history(period="2y", interval="1d"))
+        except:
+            return (sym, pd.DataFrame())
+
+    print(f"  Telechargement parallele de {len(ACTIFS)} actifs...")
+    hist_cache = {}
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        for sym, hist in executor.map(lambda s: _download_hist(s), ACTIFS.keys()):
+            if not hist.empty and len(hist) >= 300:
+                hist_cache[sym] = hist
+    print(f"  {len(hist_cache)}/{len(ACTIFS)} actifs avec donnees suffisantes")
+
     for sym, nom in ACTIFS.items():
         try:
             peut_sym, raison_sym = protections.peut_trader(sym, etat.get("drawdown", 0.0))
             if not peut_sym:
-                print(f"  {nom}: BLOQUE - {raison_sym}")
                 continue
 
-            t = yf.Ticker(sym)
-            hist = t.history(period="2y", interval="1d")
-            if hist.empty or len(hist) < 300:
-                print(f"  {nom}: pas assez de donnees ({len(hist)} jours)")
+            hist = hist_cache.get(sym)
+            if hist is None:
                 continue
 
             prix_serie = hist["Close"].dropna()

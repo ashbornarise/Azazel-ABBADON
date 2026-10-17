@@ -156,13 +156,14 @@ body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:12px
 <!-- Bottom Bar -->
 <div class="bottombar">
   <span id="bottom-time"></span>
-  <span>26 actifs · 14 crypto · 10 actions · Gold/Silver · Intervalle 5min</span>
+  <span>100 marches · 30 crypto · 45 actions · 15 forex · 10 commodities/indices</span>
   <span>Rex Clemens Capital &copy; 2026</span>
 </div>
 
 <script>
 const API_BASE = window.REX_API_BASE || '';
 const ALL_SYMS = [
+  // Crypto (30)
   {s:'BTC-USD',n:'Bitcoin',cat:'crypto'},{s:'ETH-USD',n:'Ethereum',cat:'crypto'},
   {s:'SOL-USD',n:'Solana',cat:'crypto'},{s:'BNB-USD',n:'BNB',cat:'crypto'},
   {s:'XRP-USD',n:'XRP',cat:'crypto'},{s:'ADA-USD',n:'Cardano',cat:'crypto'},
@@ -170,12 +171,55 @@ const ALL_SYMS = [
   {s:'DOT-USD',n:'Polkadot',cat:'crypto'},{s:'LINK-USD',n:'Chainlink',cat:'crypto'},
   {s:'MATIC-USD',n:'Polygon',cat:'crypto'},{s:'ATOM-USD',n:'Cosmos',cat:'crypto'},
   {s:'UNI-USD',n:'Uniswap',cat:'crypto'},{s:'LTC-USD',n:'Litecoin',cat:'crypto'},
+  {s:'NEAR-USD',n:'Near',cat:'crypto'},{s:'APT-USD',n:'Aptos',cat:'crypto'},
+  {s:'OP-USD',n:'Optimism',cat:'crypto'},{s:'ARB-USD',n:'Arbitrum',cat:'crypto'},
+  {s:'FIL-USD',n:'Filecoin',cat:'crypto'},{s:'ALGO-USD',n:'Algorand',cat:'crypto'},
+  {s:'VET-USD',n:'VeChain',cat:'crypto'},{s:'ICP-USD',n:'Internet Computer',cat:'crypto'},
+  {s:'HBAR-USD',n:'Hedera',cat:'crypto'},{s:'FTM-USD',n:'Fantom',cat:'crypto'},
+  {s:'AAVE-USD',n:'Aave',cat:'crypto'},{s:'MKR-USD',n:'Maker',cat:'crypto'},
+  {s:'GRT-USD',n:'The Graph',cat:'crypto'},{s:'INJ-USD',n:'Injective',cat:'crypto'},
+  {s:'TIA-USD',n:'Celestia',cat:'crypto'},{s:'SUI-USD',n:'Sui',cat:'crypto'},
+  // Actions US Tech (20)
   {s:'MSFT',n:'Microsoft',cat:'stock'},{s:'AAPL',n:'Apple',cat:'stock'},
   {s:'NVDA',n:'Nvidia',cat:'stock'},{s:'TSLA',n:'Tesla',cat:'stock'},
   {s:'AMZN',n:'Amazon',cat:'stock'},{s:'META',n:'Meta',cat:'stock'},
   {s:'GOOGL',n:'Google',cat:'stock'},{s:'AMD',n:'AMD',cat:'stock'},
   {s:'NFLX',n:'Netflix',cat:'stock'},{s:'COIN',n:'Coinbase',cat:'stock'},
+  {s:'CRM',n:'Salesforce',cat:'stock'},{s:'ORCL',n:'Oracle',cat:'stock'},
+  {s:'UBER',n:'Uber',cat:'stock'},{s:'SQ',n:'Block',cat:'stock'},
+  {s:'SHOP',n:'Shopify',cat:'stock'},{s:'PLTR',n:'Palantir',cat:'stock'},
+  {s:'SNOW',n:'Snowflake',cat:'stock'},{s:'MU',n:'Micron',cat:'stock'},
+  {s:'INTC',n:'Intel',cat:'stock'},{s:'PYPL',n:'PayPal',cat:'stock'},
+  // Finance & Sante (15)
+  {s:'JPM',n:'JPMorgan',cat:'stock'},{s:'BAC',n:'Bank of America',cat:'stock'},
+  {s:'GS',n:'Goldman Sachs',cat:'stock'},{s:'V',n:'Visa',cat:'stock'},
+  {s:'MA',n:'Mastercard',cat:'stock'},{s:'BRK-B',n:'Berkshire',cat:'stock'},
+  {s:'JNJ',n:'J&J',cat:'stock'},{s:'UNH',n:'UnitedHealth',cat:'stock'},
+  {s:'PFE',n:'Pfizer',cat:'stock'},{s:'ABBV',n:'AbbVie',cat:'stock'},
+  {s:'LLY',n:'Eli Lilly',cat:'stock'},{s:'MRK',n:'Merck',cat:'stock'},
+  {s:'DIS',n:'Disney',cat:'stock'},{s:'KO',n:'Coca-Cola',cat:'stock'},
+  {s:'PEP',n:'PepsiCo',cat:'stock'},
+  // EU (10)
+  {s:'ASML',n:'ASML',cat:'eu'},{s:'SAP',n:'SAP',cat:'eu'},
+  {s:'NVO',n:'Novo Nordisk',cat:'eu'},{s:'TTE',n:'TotalEnergies',cat:'eu'},
+  {s:'SNY',n:'Sanofi',cat:'eu'},{s:'SHEL',n:'Shell',cat:'eu'},
+  {s:'UL',n:'Unilever',cat:'eu'},{s:'AZN',n:'AstraZeneca',cat:'eu'},
+  {s:'DEO',n:'Diageo',cat:'eu'},{s:'SPOT',n:'Spotify',cat:'eu'},
+  // Forex (15)
+  {s:'EURUSD=X',n:'EUR/USD',cat:'forex'},{s:'GBPUSD=X',n:'GBP/USD',cat:'forex'},
+  {s:'USDJPY=X',n:'USD/JPY',cat:'forex'},{s:'AUDUSD=X',n:'AUD/USD',cat:'forex'},
+  {s:'USDCAD=X',n:'USD/CAD',cat:'forex'},{s:'USDCHF=X',n:'USD/CHF',cat:'forex'},
+  {s:'NZDUSD=X',n:'NZD/USD',cat:'forex'},{s:'EURJPY=X',n:'EUR/JPY',cat:'forex'},
+  {s:'GBPJPY=X',n:'GBP/JPY',cat:'forex'},{s:'EURGBP=X',n:'EUR/GBP',cat:'forex'},
+  {s:'EURCAD=X',n:'EUR/CAD',cat:'forex'},{s:'AUDJPY=X',n:'AUD/JPY',cat:'forex'},
+  {s:'USDMXN=X',n:'USD/MXN',cat:'forex'},{s:'USDZAR=X',n:'USD/ZAR',cat:'forex'},
+  {s:'EURCHF=X',n:'EUR/CHF',cat:'forex'},
+  // Commodities & Indices (10)
   {s:'GC=F',n:'Gold',cat:'commodity'},{s:'SI=F',n:'Silver',cat:'commodity'},
+  {s:'CL=F',n:'Crude Oil',cat:'commodity'},{s:'NG=F',n:'Natural Gas',cat:'commodity'},
+  {s:'PL=F',n:'Platinum',cat:'commodity'},{s:'^GSPC',n:'S&P 500',cat:'index'},
+  {s:'^IXIC',n:'Nasdaq',cat:'index'},{s:'^DJI',n:'Dow Jones',cat:'index'},
+  {s:'^RUT',n:'Russell 2000',cat:'index'},{s:'^VIX',n:'VIX',cat:'index'},
 ];
 
 let gridSize = {cols:3,rows:2,total:6};
