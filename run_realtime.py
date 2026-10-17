@@ -30,6 +30,7 @@ from src.ml.multi_classifier import benchmark_classifieurs, seuil_dynamique
 from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
 from src.ml.market_intel import MarketIntelligence
 from src.ml.deep_model import DeepEnsemble
+from src.ml.social_intel import SocialIntelligence
 from src.strategies.ml_strategy import MLStrategy
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
@@ -50,47 +51,108 @@ BASE_ALLOC = 0.15
 MAX_ALLOC = 0.30
 
 ACTIFS = {
-    # === CRYPTO (30) ===
+    # === CRYPTO TOP 50 ===
     "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana",
     "BNB-USD": "BNB", "XRP-USD": "XRP", "ADA-USD": "Cardano",
     "AVAX-USD": "Avalanche", "DOGE-USD": "Dogecoin", "DOT-USD": "Polkadot",
-    "LINK-USD": "Chainlink", "MATIC-USD": "Polygon", "ATOM-USD": "Cosmos",
-    "UNI-USD": "Uniswap", "LTC-USD": "Litecoin", "NEAR-USD": "Near",
-    "APT-USD": "Aptos", "OP-USD": "Optimism", "ARB-USD": "Arbitrum",
+    "LINK-USD": "Chainlink", "ATOM-USD": "Cosmos",
+    "LTC-USD": "Litecoin", "NEAR-USD": "Near",
+    "OP-USD": "Optimism", "ARB-USD": "Arbitrum",
     "FIL-USD": "Filecoin", "ALGO-USD": "Algorand", "VET-USD": "VeChain",
-    "ICP-USD": "Internet Computer", "HBAR-USD": "Hedera", "FTM-USD": "Fantom",
-    "AAVE-USD": "Aave", "MKR-USD": "Maker", "GRT-USD": "The Graph",
-    "INJ-USD": "Injective", "TIA-USD": "Celestia", "SUI-USD": "Sui",
-    # === ACTIONS US TECH (20) ===
+    "ICP-USD": "Internet Computer", "HBAR-USD": "Hedera",
+    "AAVE-USD": "Aave", "MKR-USD": "Maker",
+    "INJ-USD": "Injective", "TIA-USD": "Celestia",
+    "RENDER-USD": "Render", "FET-USD": "Fetch.ai", "PEPE24478-USD": "Pepe",
+    "WIF-USD": "Dogwifhat", "BONK-USD": "Bonk", "FLOKI-USD": "Floki",
+    "STX-USD": "Stacks", "IMX-USD": "Immutable X", "SEI-USD": "Sei",
+    "RUNE-USD": "THORChain", "PENDLE-USD": "Pendle", "JUP-USD": "Jupiter",
+    "WLD-USD": "Worldcoin", "ONDO-USD": "Ondo", "JASMY-USD": "Jasmy",
+    "TAO-USD": "Bittensor", "KAS-USD": "Kaspa",
+    # === US TECH MEGA (30) ===
     "MSFT": "Microsoft", "AAPL": "Apple", "NVDA": "Nvidia",
     "TSLA": "Tesla", "AMZN": "Amazon", "META": "Meta",
     "GOOGL": "Google", "AMD": "AMD", "NFLX": "Netflix",
     "COIN": "Coinbase", "CRM": "Salesforce", "ORCL": "Oracle",
-    "UBER": "Uber", "SQ": "Block", "SHOP": "Shopify",
+    "UBER": "Uber", "SHOP": "Shopify",
     "PLTR": "Palantir", "SNOW": "Snowflake", "MU": "Micron",
-    "INTC": "Intel", "PYPL": "PayPal",
-    # === ACTIONS US FINANCE & SANTE (15) ===
+    "INTC": "Intel", "PYPL": "PayPal", "ADBE": "Adobe",
+    "AVGO": "Broadcom", "QCOM": "Qualcomm", "TXN": "Texas Instruments",
+    "PANW": "Palo Alto", "CRWD": "CrowdStrike", "DDOG": "Datadog",
+    "ZS": "Zscaler", "NET": "Cloudflare", "MRVL": "Marvell",
+    "ARM": "ARM Holdings",
+    # === US FINANCE (20) ===
     "JPM": "JPMorgan", "BAC": "Bank of America", "GS": "Goldman Sachs",
     "V": "Visa", "MA": "Mastercard", "BRK-B": "Berkshire",
-    "JNJ": "Johnson & Johnson", "UNH": "UnitedHealth", "PFE": "Pfizer",
+    "MS": "Morgan Stanley", "WFC": "Wells Fargo", "C": "Citigroup",
+    "SCHW": "Schwab", "AXP": "American Express", "BLK": "BlackRock",
+    "ICE": "Intercontinental", "CME": "CME Group", "SPGI": "S&P Global",
+    "MCO": "Moody's", "AON": "Aon", "TFC": "Truist",
+    "USB": "US Bancorp", "PNC": "PNC Financial",
+    # === US SANTE (20) ===
+    "JNJ": "J&J", "UNH": "UnitedHealth", "PFE": "Pfizer",
     "ABBV": "AbbVie", "LLY": "Eli Lilly", "MRK": "Merck",
+    "TMO": "Thermo Fisher", "ABT": "Abbott", "DHR": "Danaher",
+    "BMY": "Bristol-Myers", "AMGN": "Amgen", "GILD": "Gilead",
+    "ISRG": "Intuitive Surg.", "VRTX": "Vertex", "REGN": "Regeneron",
+    "MDT": "Medtronic", "SYK": "Stryker", "BSX": "Boston Scientific",
+    "EW": "Edwards Life", "ZTS": "Zoetis",
+    # === US CONSO & INDUSTRIE (25) ===
     "DIS": "Disney", "KO": "Coca-Cola", "PEP": "PepsiCo",
-    # === ACTIONS EU (10) ===
+    "WMT": "Walmart", "COST": "Costco", "HD": "Home Depot",
+    "MCD": "McDonald's", "SBUX": "Starbucks", "NKE": "Nike",
+    "LOW": "Lowe's", "TGT": "Target", "TJX": "TJ Maxx",
+    "PG": "Procter & Gamble", "CL": "Colgate", "EL": "Estee Lauder",
+    "BA": "Boeing", "CAT": "Caterpillar", "GE": "GE Aerospace",
+    "HON": "Honeywell", "UPS": "UPS", "FDX": "FedEx",
+    "RTX": "RTX", "LMT": "Lockheed Martin", "DE": "Deere",
+    "MMM": "3M",
+    # === US ENERGY & UTILITIES (10) ===
+    "XOM": "ExxonMobil", "CVX": "Chevron", "COP": "ConocoPhillips",
+    "SLB": "Schlumberger", "EOG": "EOG Resources", "MPC": "Marathon Petro",
+    "NEE": "NextEra Energy", "DUK": "Duke Energy", "SO": "Southern Co",
+    "D": "Dominion Energy",
+    # === EUROPE (20) ===
     "ASML": "ASML", "SAP": "SAP", "NVO": "Novo Nordisk",
     "TTE": "TotalEnergies", "SNY": "Sanofi", "SHEL": "Shell",
     "UL": "Unilever", "AZN": "AstraZeneca", "DEO": "Diageo",
-    "SPOT": "Spotify",
-    # === FOREX (15) ===
+    "SPOT": "Spotify", "RACE": "Ferrari", "LOGI": "Logitech",
+    "STM": "STMicro", "SIE.DE": "Siemens", "ALV.DE": "Allianz",
+    "BAS.DE": "BASF", "BMW.DE": "BMW", "VOW3.DE": "Volkswagen",
+    "MC.PA": "LVMH", "OR.PA": "L'Oreal",
+    # === ASIE & EMERGENTS (15) ===
+    "TSM": "TSMC", "BABA": "Alibaba", "JD": "JD.com",
+    "BIDU": "Baidu", "PDD": "PDD Holdings", "NIO": "NIO",
+    "XPEV": "XPeng", "LI": "Li Auto", "GRAB": "Grab",
+    "SE": "Sea Limited", "MELI": "MercadoLibre", "NU": "Nu Holdings",
+    "INFY": "Infosys", "WIT": "Wipro", "HDB": "HDFC Bank",
+    # === ETFs MAJEURS (15) ===
+    "SPY": "S&P 500 ETF", "QQQ": "Nasdaq 100 ETF", "IWM": "Russell 2000 ETF",
+    "DIA": "Dow Jones ETF", "GLD": "Gold ETF", "SLV": "Silver ETF",
+    "USO": "Oil ETF", "TLT": "Bonds 20Y ETF", "XLF": "Finance ETF",
+    "XLK": "Tech ETF", "XLE": "Energy ETF", "XLV": "Health ETF",
+    "ARKK": "ARK Innovation", "SOXX": "Semicon ETF", "KWEB": "China Tech ETF",
+    # === FOREX (25) ===
     "EURUSD=X": "EUR/USD", "GBPUSD=X": "GBP/USD", "USDJPY=X": "USD/JPY",
     "AUDUSD=X": "AUD/USD", "USDCAD=X": "USD/CAD", "USDCHF=X": "USD/CHF",
     "NZDUSD=X": "NZD/USD", "EURJPY=X": "EUR/JPY", "GBPJPY=X": "GBP/JPY",
     "EURGBP=X": "EUR/GBP", "EURCAD=X": "EUR/CAD", "AUDJPY=X": "AUD/JPY",
     "USDMXN=X": "USD/MXN", "USDZAR=X": "USD/ZAR", "EURCHF=X": "EUR/CHF",
-    # === COMMODITIES & INDICES (10) ===
+    "USDTRY=X": "USD/TRY", "USDSGD=X": "USD/SGD", "USDHKD=X": "USD/HKD",
+    "USDNOK=X": "USD/NOK", "USDSEK=X": "USD/SEK", "USDPLN=X": "USD/PLN",
+    "GBPCHF=X": "GBP/CHF", "AUDNZD=X": "AUD/NZD", "CADJPY=X": "CAD/JPY",
+    "CHFJPY=X": "CHF/JPY",
+    # === COMMODITIES (12) ===
     "GC=F": "Gold", "SI=F": "Silver", "CL=F": "Crude Oil",
-    "NG=F": "Natural Gas", "PL=F": "Platinum",
+    "NG=F": "Natural Gas", "PL=F": "Platinum", "PA=F": "Palladium",
+    "HG=F": "Copper", "ZC=F": "Corn", "ZW=F": "Wheat",
+    "ZS=F": "Soybean", "KC=F": "Coffee", "CC=F": "Cocoa",
+    # === INDICES MONDIAUX (15) ===
     "^GSPC": "S&P 500", "^IXIC": "Nasdaq", "^DJI": "Dow Jones",
     "^RUT": "Russell 2000", "^VIX": "VIX",
+    "^FTSE": "FTSE 100", "^GDAXI": "DAX", "^FCHI": "CAC 40",
+    "^N225": "Nikkei", "^HSI": "Hang Seng", "^STOXX50E": "Euro Stoxx 50",
+    "^BVSP": "Bovespa", "^GSPTSE": "TSX Canada",
+    "^NSEI": "Nifty 50", "^KS11": "KOSPI",
 }
 
 
@@ -183,6 +245,7 @@ hyperopt_derniere_run = {}
 HYPEROPT_INTERVAL = 3600
 
 market_intel = MarketIntelligence(ACTIFS)
+social_intel = SocialIntelligence()
 deep_models = {}
 DEEP_RETRAIN_INTERVAL = 1800
 
@@ -412,7 +475,7 @@ def _fetch_un_prix(sym, nom):
 
 def fetch_prix():
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         futures = {executor.submit(_fetch_un_prix, sym, nom): (sym, nom) for sym, nom in ACTIFS.items()}
         for future in as_completed(futures):
             result = future.result()
@@ -612,7 +675,7 @@ def analyser_et_trader():
 
     print(f"  Telechargement parallele de {len(ACTIFS)} actifs...")
     hist_cache = {}
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         for sym, hist in executor.map(lambda s: _download_hist(s), ACTIFS.keys()):
             if not hist.empty and len(hist) >= 300:
                 hist_cache[sym] = hist
@@ -667,7 +730,8 @@ def analyser_et_trader():
                 else:
                     kelly = max(0.5, growth_ratio)
                 intel_boost = market_intel.get_boost_dynamique(sym) if market_intel.last_scan else 1.0
-                boost = MARCHES_PRIORITAIRES.get(sym, 1.0) * intel_boost * kelly
+                social_boost = social_intel.get_social_boost(sym) if social_intel.last_scan else 1.0
+                boost = MARCHES_PRIORITAIRES.get(sym, 1.0) * intel_boost * social_boost * kelly
                 alloc = min(BASE_ALLOC * boost, MAX_ALLOC)
                 montant = etat["cash"] * alloc
                 if montant >= 1:
@@ -695,8 +759,8 @@ def analyser_et_trader():
                         "capital": round(etat["cash"], 2),
                     })
                     protections.apres_trade(sym, 0.0)
-                    cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% >= {seuil_a}% | Kelly={kelly:.2f} Intel={intel_boost:.2f} | SL={prix_actuel*0.95:.2f} TP={prix_actuel*1.08:.2f}")
-                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% | Kelly={kelly:.2f} Intel={intel_boost:.2f}) [SL a {prix_actuel * 0.95:.2f}]")
+                    cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% >= {seuil_a}% | Kelly={kelly:.2f} Intel={intel_boost:.2f} Social={social_boost:.2f}")
+                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% | K={kelly:.2f} I={intel_boost:.2f} S={social_boost:.2f})")
                 else:
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
 
@@ -787,6 +851,23 @@ def loop_intel():
         time.sleep(180)
 
 
+def loop_social():
+    time.sleep(30)
+    while True:
+        try:
+            cortex_log("INFO", "SOCIAL", "Scan Reddit/Twitter en cours...")
+            sentiments = social_intel.scan_reddit()
+            trending = social_intel.trending
+            if trending:
+                top3 = ", ".join(f"{s[0]}({s[1]['label']})" for s in trending[:3])
+                cortex_log("ML", "SOCIAL", f"Trending: {top3} | {len(sentiments)} tickers detectes sur {social_intel.to_dict()['total_posts']} posts")
+            else:
+                cortex_log("INFO", "SOCIAL", "Aucun ticker detecte dans les posts")
+        except Exception as e:
+            cortex_log("ERR", "SOCIAL", f"Erreur scan social: {e}")
+        time.sleep(300)
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def _json_response(self, data):
         self.send_response(200)
@@ -873,6 +954,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json_response(data)
             return
 
+        if path == "/api/social":
+            data = social_intel.to_dict()
+            self._json_response(data)
+            return
+
         if path == "/api/deep":
             breakdown = {}
             for sym, model in deep_models.items():
@@ -943,6 +1029,9 @@ def main():
 
     threading.Thread(target=loop_intel, daemon=True).start()
     print("[INTEL] Market Intelligence: scan toutes les 3 minutes")
+
+    threading.Thread(target=loop_social, daemon=True).start()
+    print("[SOCIAL] Reddit/Twitter sentiment: scan toutes les 5 minutes")
 
     print(f"[TRADE] Intervalle: {TRADE_INTERVAL}s ({TRADE_INTERVAL//60} min)")
     print("[TRADE] Premiere analyse en cours...")

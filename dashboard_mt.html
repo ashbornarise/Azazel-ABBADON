@@ -247,6 +247,7 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
       <div class="panel" style="grid-column:span 2"><div class="panel-hdr"><span class="panel-title" style="color:#f59e0b">Market Intelligence</span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="intel-scan-time">—</span></div><div class="panel-body" style="overflow-y:auto;max-height:220px"><table style="width:100%;border-collapse:collapse;font-size:11px" id="intel-table"><thead><tr style="color:var(--fg2);border-bottom:1px solid var(--rule)"><th style="text-align:left;padding:3px 6px">Actif</th><th style="text-align:right;padding:3px 6px">1h</th><th style="text-align:right;padding:3px 6px">4h</th><th style="text-align:right;padding:3px 6px">24h</th><th style="text-align:right;padding:3px 6px">Vol</th><th style="text-align:right;padding:3px 6px">RSI</th><th style="text-align:right;padding:3px 6px">Score</th></tr></thead><tbody id="intel-tbody"><tr><td colspan="7" style="padding:20px;color:var(--fg2);text-align:center">Scan en cours...</td></tr></tbody></table></div></div>
       <div class="panel"><div class="panel-hdr"><span class="panel-title" style="color:#f59e0b">Secteurs Momentum</span></div><div class="panel-body"><div id="intel-sectors" style="padding:8px"><span style="color:var(--fg2)">Chargement...</span></div></div></div>
     </div>
+    <div class="panel" style="margin-bottom:16px"><div class="panel-hdr"><span class="panel-title" style="color:#e040fb">Social Intelligence — Reddit</span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="social-scan-time">—</span></div><div class="panel-body" style="overflow-y:auto;max-height:200px"><table style="width:100%;border-collapse:collapse;font-size:11px" id="social-table"><thead><tr style="color:var(--fg2);border-bottom:1px solid var(--rule)"><th style="text-align:left;padding:3px 6px">Ticker</th><th style="text-align:right;padding:3px 6px">Mentions</th><th style="text-align:right;padding:3px 6px">Sentiment</th><th style="text-align:center;padding:3px 6px">Signal</th><th style="text-align:right;padding:3px 6px">Engagement</th><th style="text-align:left;padding:3px 6px">Top Post</th></tr></thead><tbody id="social-tbody"><tr><td colspan="6" style="padding:20px;color:var(--fg2);text-align:center">Scan Reddit en cours...</td></tr></tbody></table></div></div>
     <div class="panel" style="margin-bottom:16px"><div class="panel-hdr"><span class="panel-title" style="color:#06b6d4">CORTEX — Cerveau ML</span><span class="cortex-dot"></span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="cortex-count">0 logs</span></div><div class="cortex-terminal" id="cortex-terminal"><div style="padding:20px;color:var(--fg2)">Connexion au cerveau CORTEX...</div></div></div>
     <div id="ml-cards"></div>
   </div>
@@ -254,51 +255,123 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
 
 <div class="bottombar">
   <span id="bottom-time"></span>
-  <span>100 marches · Scroll=zoom · Drag=pan · Double-clic=reset</span>
+  <span>300+ marches · Scroll=zoom · Drag=pan · Double-clic=reset</span>
   <span>Rex Clemens Capital &copy; 2026</span>
 </div>
 
 <script>
 const API_BASE = window.REX_API_BASE || '';
 const ALL_SYMS = [
+  // Crypto (40+)
   {s:'BTC-USD',n:'Bitcoin',cat:'crypto'},{s:'ETH-USD',n:'Ethereum',cat:'crypto'},
   {s:'SOL-USD',n:'Solana',cat:'crypto'},{s:'BNB-USD',n:'BNB',cat:'crypto'},
   {s:'XRP-USD',n:'XRP',cat:'crypto'},{s:'ADA-USD',n:'Cardano',cat:'crypto'},
   {s:'AVAX-USD',n:'Avalanche',cat:'crypto'},{s:'DOGE-USD',n:'Dogecoin',cat:'crypto'},
   {s:'DOT-USD',n:'Polkadot',cat:'crypto'},{s:'LINK-USD',n:'Chainlink',cat:'crypto'},
-  {s:'MATIC-USD',n:'Polygon',cat:'crypto'},{s:'ATOM-USD',n:'Cosmos',cat:'crypto'},
-  {s:'UNI-USD',n:'Uniswap',cat:'crypto'},{s:'LTC-USD',n:'Litecoin',cat:'crypto'},
-  {s:'NEAR-USD',n:'Near',cat:'crypto'},{s:'APT-USD',n:'Aptos',cat:'crypto'},
-  {s:'OP-USD',n:'Optimism',cat:'crypto'},{s:'ARB-USD',n:'Arbitrum',cat:'crypto'},
-  {s:'FIL-USD',n:'Filecoin',cat:'crypto'},{s:'ALGO-USD',n:'Algorand',cat:'crypto'},
-  {s:'VET-USD',n:'VeChain',cat:'crypto'},{s:'ICP-USD',n:'Internet Computer',cat:'crypto'},
-  {s:'HBAR-USD',n:'Hedera',cat:'crypto'},{s:'FTM-USD',n:'Fantom',cat:'crypto'},
+  {s:'ATOM-USD',n:'Cosmos',cat:'crypto'},{s:'LTC-USD',n:'Litecoin',cat:'crypto'},
+  {s:'NEAR-USD',n:'Near',cat:'crypto'},{s:'OP-USD',n:'Optimism',cat:'crypto'},
+  {s:'ARB-USD',n:'Arbitrum',cat:'crypto'},{s:'FIL-USD',n:'Filecoin',cat:'crypto'},
+  {s:'ALGO-USD',n:'Algorand',cat:'crypto'},{s:'VET-USD',n:'VeChain',cat:'crypto'},
+  {s:'ICP-USD',n:'Internet Computer',cat:'crypto'},{s:'HBAR-USD',n:'Hedera',cat:'crypto'},
   {s:'AAVE-USD',n:'Aave',cat:'crypto'},{s:'MKR-USD',n:'Maker',cat:'crypto'},
-  {s:'GRT-USD',n:'The Graph',cat:'crypto'},{s:'INJ-USD',n:'Injective',cat:'crypto'},
-  {s:'TIA-USD',n:'Celestia',cat:'crypto'},{s:'SUI-USD',n:'Sui',cat:'crypto'},
+  {s:'INJ-USD',n:'Injective',cat:'crypto'},{s:'TIA-USD',n:'Celestia',cat:'crypto'},
+  {s:'RENDER-USD',n:'Render',cat:'crypto'},{s:'FET-USD',n:'Fetch.ai',cat:'crypto'},
+  {s:'PEPE24478-USD',n:'Pepe',cat:'crypto'},{s:'WIF-USD',n:'Dogwifhat',cat:'crypto'},
+  {s:'BONK-USD',n:'Bonk',cat:'crypto'},{s:'FLOKI-USD',n:'Floki',cat:'crypto'},
+  {s:'STX-USD',n:'Stacks',cat:'crypto'},{s:'IMX-USD',n:'Immutable X',cat:'crypto'},
+  {s:'SEI-USD',n:'Sei',cat:'crypto'},{s:'RUNE-USD',n:'THORChain',cat:'crypto'},
+  {s:'PENDLE-USD',n:'Pendle',cat:'crypto'},{s:'JUP-USD',n:'Jupiter',cat:'crypto'},
+  {s:'WLD-USD',n:'Worldcoin',cat:'crypto'},{s:'ONDO-USD',n:'Ondo',cat:'crypto'},
+  {s:'JASMY-USD',n:'Jasmy',cat:'crypto'},{s:'TAO-USD',n:'Bittensor',cat:'crypto'},
+  {s:'KAS-USD',n:'Kaspa',cat:'crypto'},
+  // US Tech (30)
   {s:'MSFT',n:'Microsoft',cat:'stock'},{s:'AAPL',n:'Apple',cat:'stock'},
   {s:'NVDA',n:'Nvidia',cat:'stock'},{s:'TSLA',n:'Tesla',cat:'stock'},
   {s:'AMZN',n:'Amazon',cat:'stock'},{s:'META',n:'Meta',cat:'stock'},
   {s:'GOOGL',n:'Google',cat:'stock'},{s:'AMD',n:'AMD',cat:'stock'},
   {s:'NFLX',n:'Netflix',cat:'stock'},{s:'COIN',n:'Coinbase',cat:'stock'},
   {s:'CRM',n:'Salesforce',cat:'stock'},{s:'ORCL',n:'Oracle',cat:'stock'},
-  {s:'UBER',n:'Uber',cat:'stock'},{s:'SQ',n:'Block',cat:'stock'},
-  {s:'SHOP',n:'Shopify',cat:'stock'},{s:'PLTR',n:'Palantir',cat:'stock'},
-  {s:'SNOW',n:'Snowflake',cat:'stock'},{s:'MU',n:'Micron',cat:'stock'},
-  {s:'INTC',n:'Intel',cat:'stock'},{s:'PYPL',n:'PayPal',cat:'stock'},
-  {s:'JPM',n:'JPMorgan',cat:'stock'},{s:'BAC',n:'Bank of America',cat:'stock'},
-  {s:'GS',n:'Goldman Sachs',cat:'stock'},{s:'V',n:'Visa',cat:'stock'},
+  {s:'UBER',n:'Uber',cat:'stock'},{s:'SHOP',n:'Shopify',cat:'stock'},
+  {s:'PLTR',n:'Palantir',cat:'stock'},{s:'SNOW',n:'Snowflake',cat:'stock'},
+  {s:'MU',n:'Micron',cat:'stock'},{s:'INTC',n:'Intel',cat:'stock'},
+  {s:'PYPL',n:'PayPal',cat:'stock'},{s:'ADBE',n:'Adobe',cat:'stock'},
+  {s:'AVGO',n:'Broadcom',cat:'stock'},{s:'QCOM',n:'Qualcomm',cat:'stock'},
+  {s:'TXN',n:'Texas Instruments',cat:'stock'},{s:'PANW',n:'Palo Alto',cat:'stock'},
+  {s:'CRWD',n:'CrowdStrike',cat:'stock'},{s:'DDOG',n:'Datadog',cat:'stock'},
+  {s:'ZS',n:'Zscaler',cat:'stock'},{s:'NET',n:'Cloudflare',cat:'stock'},
+  {s:'MRVL',n:'Marvell',cat:'stock'},{s:'ARM',n:'ARM Holdings',cat:'stock'},
+  // US Finance (20)
+  {s:'JPM',n:'JPMorgan',cat:'stock'},{s:'BAC',n:'BofA',cat:'stock'},
+  {s:'GS',n:'Goldman',cat:'stock'},{s:'V',n:'Visa',cat:'stock'},
   {s:'MA',n:'Mastercard',cat:'stock'},{s:'BRK-B',n:'Berkshire',cat:'stock'},
+  {s:'MS',n:'Morgan Stanley',cat:'stock'},{s:'WFC',n:'Wells Fargo',cat:'stock'},
+  {s:'C',n:'Citigroup',cat:'stock'},{s:'SCHW',n:'Schwab',cat:'stock'},
+  {s:'AXP',n:'AmEx',cat:'stock'},{s:'BLK',n:'BlackRock',cat:'stock'},
+  {s:'ICE',n:'ICE',cat:'stock'},{s:'CME',n:'CME Group',cat:'stock'},
+  {s:'SPGI',n:'S&P Global',cat:'stock'},{s:'MCO',n:"Moody's",cat:'stock'},
+  {s:'AON',n:'Aon',cat:'stock'},{s:'TFC',n:'Truist',cat:'stock'},
+  {s:'USB',n:'US Bancorp',cat:'stock'},{s:'PNC',n:'PNC',cat:'stock'},
+  // US Health (20)
   {s:'JNJ',n:'J&J',cat:'stock'},{s:'UNH',n:'UnitedHealth',cat:'stock'},
   {s:'PFE',n:'Pfizer',cat:'stock'},{s:'ABBV',n:'AbbVie',cat:'stock'},
   {s:'LLY',n:'Eli Lilly',cat:'stock'},{s:'MRK',n:'Merck',cat:'stock'},
+  {s:'TMO',n:'Thermo Fisher',cat:'stock'},{s:'ABT',n:'Abbott',cat:'stock'},
+  {s:'DHR',n:'Danaher',cat:'stock'},{s:'BMY',n:'Bristol-Myers',cat:'stock'},
+  {s:'AMGN',n:'Amgen',cat:'stock'},{s:'GILD',n:'Gilead',cat:'stock'},
+  {s:'ISRG',n:'Intuitive',cat:'stock'},{s:'VRTX',n:'Vertex',cat:'stock'},
+  {s:'REGN',n:'Regeneron',cat:'stock'},{s:'MDT',n:'Medtronic',cat:'stock'},
+  {s:'SYK',n:'Stryker',cat:'stock'},{s:'BSX',n:'Boston Sci',cat:'stock'},
+  {s:'EW',n:'Edwards',cat:'stock'},{s:'ZTS',n:'Zoetis',cat:'stock'},
+  // US Conso & Industrie (25)
   {s:'DIS',n:'Disney',cat:'stock'},{s:'KO',n:'Coca-Cola',cat:'stock'},
-  {s:'PEP',n:'PepsiCo',cat:'stock'},
+  {s:'PEP',n:'PepsiCo',cat:'stock'},{s:'WMT',n:'Walmart',cat:'stock'},
+  {s:'COST',n:'Costco',cat:'stock'},{s:'HD',n:'Home Depot',cat:'stock'},
+  {s:'MCD',n:"McDonald's",cat:'stock'},{s:'SBUX',n:'Starbucks',cat:'stock'},
+  {s:'NKE',n:'Nike',cat:'stock'},{s:'LOW',n:"Lowe's",cat:'stock'},
+  {s:'TGT',n:'Target',cat:'stock'},{s:'TJX',n:'TJ Maxx',cat:'stock'},
+  {s:'PG',n:'P&G',cat:'stock'},{s:'BA',n:'Boeing',cat:'stock'},
+  {s:'CAT',n:'Caterpillar',cat:'stock'},{s:'GE',n:'GE',cat:'stock'},
+  {s:'HON',n:'Honeywell',cat:'stock'},{s:'UPS',n:'UPS',cat:'stock'},
+  {s:'FDX',n:'FedEx',cat:'stock'},{s:'RTX',n:'RTX',cat:'stock'},
+  {s:'LMT',n:'Lockheed',cat:'stock'},{s:'DE',n:'Deere',cat:'stock'},
+  {s:'MMM',n:'3M',cat:'stock'},{s:'CL',n:'Colgate',cat:'stock'},
+  {s:'EL',n:'Estee Lauder',cat:'stock'},
+  // Energy (10)
+  {s:'XOM',n:'ExxonMobil',cat:'stock'},{s:'CVX',n:'Chevron',cat:'stock'},
+  {s:'COP',n:'ConocoPhillips',cat:'stock'},{s:'SLB',n:'Schlumberger',cat:'stock'},
+  {s:'EOG',n:'EOG',cat:'stock'},{s:'MPC',n:'Marathon',cat:'stock'},
+  {s:'NEE',n:'NextEra',cat:'stock'},{s:'DUK',n:'Duke Energy',cat:'stock'},
+  {s:'SO',n:'Southern',cat:'stock'},{s:'D',n:'Dominion',cat:'stock'},
+  // Europe (20)
   {s:'ASML',n:'ASML',cat:'eu'},{s:'SAP',n:'SAP',cat:'eu'},
   {s:'NVO',n:'Novo Nordisk',cat:'eu'},{s:'TTE',n:'TotalEnergies',cat:'eu'},
   {s:'SNY',n:'Sanofi',cat:'eu'},{s:'SHEL',n:'Shell',cat:'eu'},
   {s:'UL',n:'Unilever',cat:'eu'},{s:'AZN',n:'AstraZeneca',cat:'eu'},
   {s:'DEO',n:'Diageo',cat:'eu'},{s:'SPOT',n:'Spotify',cat:'eu'},
+  {s:'RACE',n:'Ferrari',cat:'eu'},{s:'LOGI',n:'Logitech',cat:'eu'},
+  {s:'STM',n:'STMicro',cat:'eu'},{s:'SIE.DE',n:'Siemens',cat:'eu'},
+  {s:'ALV.DE',n:'Allianz',cat:'eu'},{s:'BAS.DE',n:'BASF',cat:'eu'},
+  {s:'BMW.DE',n:'BMW',cat:'eu'},{s:'VOW3.DE',n:'Volkswagen',cat:'eu'},
+  {s:'MC.PA',n:'LVMH',cat:'eu'},{s:'OR.PA',n:"L'Oreal",cat:'eu'},
+  // Asia (15)
+  {s:'TSM',n:'TSMC',cat:'stock'},{s:'BABA',n:'Alibaba',cat:'stock'},
+  {s:'JD',n:'JD.com',cat:'stock'},{s:'BIDU',n:'Baidu',cat:'stock'},
+  {s:'PDD',n:'PDD',cat:'stock'},{s:'NIO',n:'NIO',cat:'stock'},
+  {s:'XPEV',n:'XPeng',cat:'stock'},{s:'LI',n:'Li Auto',cat:'stock'},
+  {s:'GRAB',n:'Grab',cat:'stock'},{s:'SE',n:'Sea Ltd',cat:'stock'},
+  {s:'MELI',n:'MercadoLibre',cat:'stock'},{s:'NU',n:'Nu Holdings',cat:'stock'},
+  {s:'INFY',n:'Infosys',cat:'stock'},{s:'WIT',n:'Wipro',cat:'stock'},
+  {s:'HDB',n:'HDFC Bank',cat:'stock'},
+  // ETFs (15)
+  {s:'SPY',n:'S&P 500 ETF',cat:'etf'},{s:'QQQ',n:'Nasdaq ETF',cat:'etf'},
+  {s:'IWM',n:'Russell ETF',cat:'etf'},{s:'DIA',n:'Dow ETF',cat:'etf'},
+  {s:'GLD',n:'Gold ETF',cat:'etf'},{s:'SLV',n:'Silver ETF',cat:'etf'},
+  {s:'USO',n:'Oil ETF',cat:'etf'},{s:'TLT',n:'Bonds ETF',cat:'etf'},
+  {s:'XLF',n:'Finance ETF',cat:'etf'},{s:'XLK',n:'Tech ETF',cat:'etf'},
+  {s:'XLE',n:'Energy ETF',cat:'etf'},{s:'XLV',n:'Health ETF',cat:'etf'},
+  {s:'ARKK',n:'ARK Innov',cat:'etf'},{s:'SOXX',n:'Semicon ETF',cat:'etf'},
+  {s:'KWEB',n:'China ETF',cat:'etf'},
+  // Forex (25)
   {s:'EURUSD=X',n:'EUR/USD',cat:'forex'},{s:'GBPUSD=X',n:'GBP/USD',cat:'forex'},
   {s:'USDJPY=X',n:'USD/JPY',cat:'forex'},{s:'AUDUSD=X',n:'AUD/USD',cat:'forex'},
   {s:'USDCAD=X',n:'USD/CAD',cat:'forex'},{s:'USDCHF=X',n:'USD/CHF',cat:'forex'},
@@ -306,12 +379,28 @@ const ALL_SYMS = [
   {s:'GBPJPY=X',n:'GBP/JPY',cat:'forex'},{s:'EURGBP=X',n:'EUR/GBP',cat:'forex'},
   {s:'EURCAD=X',n:'EUR/CAD',cat:'forex'},{s:'AUDJPY=X',n:'AUD/JPY',cat:'forex'},
   {s:'USDMXN=X',n:'USD/MXN',cat:'forex'},{s:'USDZAR=X',n:'USD/ZAR',cat:'forex'},
-  {s:'EURCHF=X',n:'EUR/CHF',cat:'forex'},
+  {s:'EURCHF=X',n:'EUR/CHF',cat:'forex'},{s:'USDTRY=X',n:'USD/TRY',cat:'forex'},
+  {s:'USDSGD=X',n:'USD/SGD',cat:'forex'},{s:'USDHKD=X',n:'USD/HKD',cat:'forex'},
+  {s:'USDNOK=X',n:'USD/NOK',cat:'forex'},{s:'USDSEK=X',n:'USD/SEK',cat:'forex'},
+  {s:'USDPLN=X',n:'USD/PLN',cat:'forex'},{s:'GBPCHF=X',n:'GBP/CHF',cat:'forex'},
+  {s:'AUDNZD=X',n:'AUD/NZD',cat:'forex'},{s:'CADJPY=X',n:'CAD/JPY',cat:'forex'},
+  {s:'CHFJPY=X',n:'CHF/JPY',cat:'forex'},
+  // Commodities (12)
   {s:'GC=F',n:'Gold',cat:'commodity'},{s:'SI=F',n:'Silver',cat:'commodity'},
   {s:'CL=F',n:'Crude Oil',cat:'commodity'},{s:'NG=F',n:'Natural Gas',cat:'commodity'},
-  {s:'PL=F',n:'Platinum',cat:'commodity'},{s:'^GSPC',n:'S&P 500',cat:'index'},
-  {s:'^IXIC',n:'Nasdaq',cat:'index'},{s:'^DJI',n:'Dow Jones',cat:'index'},
-  {s:'^RUT',n:'Russell 2000',cat:'index'},{s:'^VIX',n:'VIX',cat:'index'},
+  {s:'PL=F',n:'Platinum',cat:'commodity'},{s:'PA=F',n:'Palladium',cat:'commodity'},
+  {s:'HG=F',n:'Copper',cat:'commodity'},{s:'ZC=F',n:'Corn',cat:'commodity'},
+  {s:'ZW=F',n:'Wheat',cat:'commodity'},{s:'ZS=F',n:'Soybean',cat:'commodity'},
+  {s:'KC=F',n:'Coffee',cat:'commodity'},{s:'CC=F',n:'Cocoa',cat:'commodity'},
+  // Indices (15)
+  {s:'^GSPC',n:'S&P 500',cat:'index'},{s:'^IXIC',n:'Nasdaq',cat:'index'},
+  {s:'^DJI',n:'Dow Jones',cat:'index'},{s:'^RUT',n:'Russell 2000',cat:'index'},
+  {s:'^VIX',n:'VIX',cat:'index'},{s:'^FTSE',n:'FTSE 100',cat:'index'},
+  {s:'^GDAXI',n:'DAX',cat:'index'},{s:'^FCHI',n:'CAC 40',cat:'index'},
+  {s:'^N225',n:'Nikkei',cat:'index'},{s:'^HSI',n:'Hang Seng',cat:'index'},
+  {s:'^STOXX50E',n:'Euro Stoxx',cat:'index'},{s:'^BVSP',n:'Bovespa',cat:'index'},
+  {s:'^GSPTSE',n:'TSX',cat:'index'},{s:'^NSEI',n:'Nifty 50',cat:'index'},
+  {s:'^KS11',n:'KOSPI',cat:'index'},
 ];
 
 let gridSize={cols:3,rows:2,total:6}, panels=[], etatGlobal={}, activeIndicator='bb', activeTab='charts';
@@ -549,10 +638,27 @@ async function loadIntel(){
   }catch(e){}
 }
 
+// === SOCIAL INTEL ===
+async function loadSocial(){
+  try{
+    const r=await fetch(`${API_BASE}/api/social`);const data=await r.json();
+    document.getElementById('social-scan-time').textContent=data.last_scan?`Scan: ${data.last_scan} UTC · ${data.total_posts||0} posts · ${data.total_tickers||0} tickers`:'—';
+    const trending=data.trending||[];
+    const tbody=document.getElementById('social-tbody');
+    if(trending.length){
+      tbody.innerHTML=trending.map(t=>{
+        const sc=t.label==='BULLISH'?'var(--green)':t.label==='BEARISH'?'var(--red)':'var(--fg2)';
+        const topPost=t.top_posts&&t.top_posts[0]?t.top_posts[0].title:'—';
+        return`<tr style="border-bottom:1px solid var(--rule)"><td style="padding:3px 6px;font-weight:700;color:var(--gold)">${t.sym}</td><td style="text-align:right;padding:3px 6px;font-weight:600">${t.mentions}</td><td style="text-align:right;padding:3px 6px;color:${sc};font-weight:600">${t.sentiment>0?'+':''}${t.sentiment}</td><td style="text-align:center;padding:3px 6px"><span style="background:${sc};color:#000;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700">${t.label}</span></td><td style="text-align:right;padding:3px 6px;color:var(--fg2)">${t.engagement}</td><td style="padding:3px 6px;color:var(--fg2);font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${topPost}</td></tr>`;
+      }).join('');
+    }
+  }catch(e){}
+}
+
 // === ML TAB ===
 async function loadML(){
   try{
-  loadIntel();
+  loadIntel();loadSocial();
   const[rml,rstats,rterm]=await Promise.all([fetch(`${API_BASE}/api/ml`),fetch(`${API_BASE}/api/stats`),fetch(`${API_BASE}/api/terminal`)]);
   const d=await rml.json();const stats=await rstats.json();const term=await rterm.json();
   document.getElementById('ml-info-row').innerHTML=[kpiHTML('Moteur CORTEX',d.modele||'Deep Ensemble',`${d.nb_features||31} features`),kpiHTML('Walk-Forward',`${d.taille_train||252}j`,`Refit: ${d.pas_reentrain||21}j`),kpiHTML('Classifieurs','6','LSTM+GRU+RF+LGB+XGB+GBM'),kpiHTML('Mise a jour',d.timestamp||'—','')].join('');
