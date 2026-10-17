@@ -15,10 +15,13 @@ import json
 import os
 import threading
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=ResourceWarning)
 
 import numpy as np
 import pandas as pd
@@ -67,10 +70,10 @@ ACTIFS = {
     "INJ-USD": "Injective", "TIA-USD": "Celestia",
     "RENDER-USD": "Render", "FET-USD": "Fetch.ai", "PEPE24478-USD": "Pepe",
     "WIF-USD": "Dogwifhat", "BONK-USD": "Bonk", "FLOKI-USD": "Floki",
-    "STX-USD": "Stacks", "IMX-USD": "Immutable X", "SEI-USD": "Sei",
+    "SEI-USD": "Sei",
     "RUNE-USD": "THORChain", "PENDLE-USD": "Pendle", "JUP-USD": "Jupiter",
     "WLD-USD": "Worldcoin", "ONDO-USD": "Ondo", "JASMY-USD": "Jasmy",
-    "TAO-USD": "Bittensor", "KAS-USD": "Kaspa",
+    "KAS-USD": "Kaspa",
     # === US TECH MEGA (30) ===
     "MSFT": "Microsoft", "AAPL": "Apple", "NVDA": "Nvidia",
     "TSLA": "Tesla", "AMZN": "Amazon", "META": "Meta",
@@ -1030,6 +1033,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         actions += 1
                 stats["secteurs"] = {"Crypto": crypto, "Forex": forex, "Actions": actions, "Indices": indices}
             self._json_response(stats)
+            return
+
+        if path == "/api/protections":
+            with lock:
+                p = protections
+                dd = etat.get("drawdown", 0)
+                cap = etat.get("capital", CAPITAL_INIT)
+                ph = etat.get("plus_haut", CAPITAL_INIT)
+                cb_bloque, cb_raison = p.circuit_breaker.est_bloque(
+                    drawdown_pct=dd, capital=cap, plus_haut=ph)
+                dl_bloque, dl_raison = p.daily_limits.est_bloque()
+                sg_bloque, sg_raison = p.stoploss.est_bloque()
+                sf_bloque, sf_raison = p.session_filter.est_bloque()
+                pnl_jour = sum(p.daily_limits._trades_jour) if p.daily_limits._trades_jour else 0
+                data = {
+                    "circuit_breaker": {"actif": True, "bloque": cb_bloque, "raison": cb_raison,
+                                        "tripped": p.circuit_breaker._tripped},
+                    "daily_limits": {"actif": True, "bloque": dl_bloque, "raison": dl_raison,
+                                     "pnl_jour": round(pnl_jour, 2),
+                                     "max_perte": p.daily_limits.max_perte_jour,
+                                     "max_gain": p.daily_limits.max_gain_jour},
+                    "stoploss_guard": {"actif": True, "bloque": sg_bloque, "raison": sg_raison,
+                                       "pertes_consec": p.stoploss._pertes_consecutives},
+                    "session_filter": {"actif": p.session_filter.actif, "bloque": sf_bloque, "raison": sf_raison},
+                    "atr_sizing": {"actif": True, "risk_pct": 2.0, "multiplier": 1.5},
+                    "trailing_paliers": {"actif": True, "palier_ratio": 1.75},
+                    "drawdown": round(dd, 2),
+                    "capital": round(cap, 2),
+                    "plus_haut": round(ph, 2),
+                }
+            self._json_response(data)
             return
 
         if path == "/api/intel":
