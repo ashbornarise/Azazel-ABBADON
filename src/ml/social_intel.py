@@ -25,8 +25,9 @@ REDDIT_SUBS = [
 ]
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RexClemens/1.0",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 SENTIMENT_WORDS = {
@@ -72,28 +73,53 @@ class SocialIntelligence:
     def _fetch_reddit_sub(self, sub):
         posts = []
         try:
-            url = f"https://www.reddit.com/r/{sub}/hot.json?limit=25"
+            url = f"https://www.reddit.com/r/{sub}/hot/.rss?limit=25"
             req = Request(url, headers=HEADERS)
-            with urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-            for child in data.get("data", {}).get("children", []):
-                post = child.get("data", {})
-                title = post.get("title", "")
-                selftext = post.get("selftext", "")[:500]
-                score = post.get("score", 0)
-                comments = post.get("num_comments", 0)
-                created = post.get("created_utc", 0)
+            with urlopen(req, timeout=15) as resp:
+                raw = resp.read().decode()
+            import xml.etree.ElementTree as ET
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+            root = ET.fromstring(raw)
+            for entry in root.findall("atom:entry", ns):
+                title_el = entry.find("atom:title", ns)
+                content_el = entry.find("atom:content", ns)
+                link_el = entry.find("atom:link", ns)
+                title = title_el.text if title_el is not None and title_el.text else ""
+                content = ""
+                if content_el is not None and content_el.text:
+                    text = re.sub(r"<[^>]+>", " ", content_el.text)
+                    content = text[:500]
+                href = link_el.get("href", "") if link_el is not None else ""
                 posts.append({
                     "sub": sub,
                     "title": title,
-                    "text": selftext,
-                    "score": score,
-                    "comments": comments,
-                    "created": created,
-                    "url": f"https://reddit.com{post.get('permalink', '')}",
+                    "text": content,
+                    "score": 1,
+                    "comments": 0,
+                    "created": 0,
+                    "url": href,
                 })
         except Exception:
             pass
+        if not posts:
+            try:
+                url = f"https://old.reddit.com/r/{sub}/hot.json?limit=25"
+                req = Request(url, headers=HEADERS)
+                with urlopen(req, timeout=15) as resp:
+                    data = json.loads(resp.read().decode())
+                for child in data.get("data", {}).get("children", []):
+                    post = child.get("data", {})
+                    posts.append({
+                        "sub": sub,
+                        "title": post.get("title", ""),
+                        "text": post.get("selftext", "")[:500],
+                        "score": post.get("score", 0),
+                        "comments": post.get("num_comments", 0),
+                        "created": post.get("created_utc", 0),
+                        "url": f"https://reddit.com{post.get('permalink', '')}",
+                    })
+            except Exception:
+                pass
         return posts
 
     def _extract_tickers(self, text):
