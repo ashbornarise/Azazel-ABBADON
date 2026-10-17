@@ -2,16 +2,18 @@
   "buildCommand": "",
   "outputDirectory": ".",
   "rewrites": [
-    { "source": "/", "destination": "/dashboard_mega.html" },
+    { "source": "/", "destination": "/dashboard_mt.html" },
+    { "source": "/mt", "destination": "/dashboard_mt.html" },
+    { "source": "/mega", "destination": "/dashboard_mega.html" },
     { "source": "/ml", "destination": "/dashboard_ml.html" },
     { "source": "/old", "destination": "/dashboard_realtime.html" },
-    { "source": "/api/:path*", "destination": "https://RAILWAY_URL_ICI/api/:path*" }
+    { "source": "/api/:path*", "destination": "http://34.71.20.144:8080/api/:path*" }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=60" }
+        { "key": "Cache-Control", "value": "public, max-age=30" }
       ]
     }
   ]
