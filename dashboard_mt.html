@@ -293,7 +293,7 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
 <div class="tab-content" id="content-ml">
   <div class="scroll-tab">
     <div class="kpi-row" id="ml-info-row"></div>
-    <div class="panel" style="margin-bottom:16px" id="shield-panel"><div class="panel-hdr"><span class="panel-title" style="color:#0d8a40">Bouclier Survie V2</span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="shield-status">Chargement...</span></div><div class="panel-body" style="padding:10px"><div id="shield-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;font-size:11px"></div></div></div>
+    <div class="panel" style="margin-bottom:16px" id="shield-panel"><div class="panel-hdr"><span class="panel-title" style="color:#0d8a40">Bouclier Survie V3</span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="shield-status">Chargement...</span></div><div class="panel-body" style="padding:10px"><div id="shield-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;font-size:11px"></div></div></div>
     <div class="ml-grid-3" style="margin-bottom:16px">
       <div class="panel"><div class="panel-hdr"><span class="panel-title">Radar Performance</span></div><div class="panel-body chart-container"><canvas id="chart-radar" width="280" height="280"></canvas></div></div>
       <div class="panel"><div class="panel-hdr"><span class="panel-title">Allocation Secteurs</span></div><div class="panel-body chart-container"><canvas id="chart-pie" width="280" height="280"></canvas></div></div>
@@ -1153,7 +1153,38 @@ function fetchShield(){
     cards.push(shieldCard('Trailing Paliers',true,
       `Palier: ${d.trailing_paliers.palier_ratio}x risk initial`,
       'SL avance a chaque palier franchi'));
+    if(d.spread_filter){
+      const sp=d.spread_filter;
+      cards.push(shieldCard('Spread Filter',!sp.bloque,
+        sp.bloque?sp.raison:`Max: ${sp.max_spread_pct}%`,
+        'Bloque si spread trop large'));
+    }
+    if(d.max_hold_time){
+      cards.push(shieldCard('Max Hold Time',true,
+        `Limite: ${d.max_hold_time.max_minutes}min`,
+        `${d.max_hold_time.positions} position(s) surveillee(s)`));
+    }
+    if(d.d1_alignment){
+      cards.push(shieldCard('D1 Alignment',true,
+        `Body min: ${d.d1_alignment.min_body_pct}%`,
+        'Skip entries contre bougie D1'));
+    }
+    if(d.partial_ladder){
+      cards.push(shieldCard('Partial Close',true,
+        `TP1: ${d.partial_ladder.tp1_ratio}R (40%) | TP2: ${d.partial_ladder.tp2_ratio}R (30%)`,
+        'Ladder 40/30/30 — verrouille les gains'));
+    }
+    if(d.weighted_history){
+      const wh=d.weighted_history;
+      const whOk=wh.multiplicateur>=0.75;
+      cards.push(shieldCard('History Score',whOk,
+        `Lot x${wh.multiplicateur}`,
+        wh.raison));
+    }
     g.innerHTML=cards.join('');
+    const vLabel=d.version?` ${d.version}`:'';
+    const eaLabel=d.ea_analysees?` (${d.ea_analysees} EAs)`:''
+    document.getElementById('shield-panel').querySelector('.panel-title').textContent='Bouclier Survie'+vLabel+eaLabel;
     const nb=d.circuit_breaker.bloque||dl.bloque||d.stoploss_guard.bloque?1:0;
     document.getElementById('shield-status').textContent=nb?'ALERTE':'Tous systemes OK';
     document.getElementById('shield-status').style.color=nb?'#c0392b':'#0d8a40';

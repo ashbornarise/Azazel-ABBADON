@@ -31,6 +31,9 @@ from src.ml.features import calculer_features, calculer_features_v2
 from src.ml.protections import (
     GestionnaireProtections, calculer_atr, calculer_sl_structurel,
     calculer_tp_structurel, position_sizing_atr, trailing_paliers,
+    bollinger_squeeze_gate, mass_index_reversal, force_index,
+    chaikin_money_flow, pin_bar_score, stochastic_signal,
+    calculer_stochastic,
 )
 from src.ml.multi_classifier import benchmark_classifieurs, seuil_dynamique
 from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
@@ -204,7 +207,7 @@ etat = {
 ml_etat = {
     "actifs": {},
     "timestamp": "-",
-    "nb_features": 31,
+    "nb_features": 37,
     "modele": "Deep Ensemble (LSTM+GRU+RF+LightGBM+XGBoost+GBM)",
     "arbres": 100,
     "walk_forward": True,
@@ -222,6 +225,8 @@ ml_etat = {
         "kurt_20j", "pct_hausse_20j", "dist_bas_20j",
         "adx_14", "bb_width", "jour_semaine", "heure",
         "pattern_score", "engulfing", "macd_cross", "cci_20",
+        "force_index", "chaikin_mf", "bb_squeeze",
+        "mass_index", "stoch_cross", "pin_bar",
     ],
     "protections": {
         "max_drawdown": "-5%",
@@ -235,6 +240,11 @@ ml_etat = {
         "take_profit": "swing high ou +8%",
         "daily_limits": "perte -3$ / gain +15$ jour",
         "equity_tasks": "coupe pire si DD>-6%, ferme tout si +20%",
+        "spread_filter": "bloque si spread > 0.15%",
+        "max_hold_time": "ferme apres 1440min",
+        "d1_alignment": "skip entries contre D1",
+        "partial_ladder": "40/30/30 aux paliers TP",
+        "weighted_history": "lot adapte aux 3 derniers trades",
     },
     "seuils_dynamiques": {},
     "benchmark_classifieurs": {},
@@ -1047,6 +1057,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 sg_bloque, sg_raison = p.stoploss.est_bloque()
                 sf_bloque, sf_raison = p.session_filter.est_bloque()
                 pnl_jour = sum(p.daily_limits._trades_jour) if p.daily_limits._trades_jour else 0
+                sp_bloque, sp_raison = p.spread_filter.est_bloque()
+                wh_mult, wh_raison = p.weighted_history.multiplicateur_lot()
                 data = {
                     "circuit_breaker": {"actif": True, "bloque": cb_bloque, "raison": cb_raison,
                                         "tripped": p.circuit_breaker._tripped},
@@ -1057,11 +1069,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "stoploss_guard": {"actif": True, "bloque": sg_bloque, "raison": sg_raison,
                                        "pertes_consec": p.stoploss._pertes_consecutives},
                     "session_filter": {"actif": p.session_filter.actif, "bloque": sf_bloque, "raison": sf_raison},
+                    "spread_filter": {"actif": True, "bloque": sp_bloque, "raison": sp_raison,
+                                      "max_spread_pct": p.spread_filter.max_spread_pct},
+                    "max_hold_time": {"actif": True, "max_minutes": p.max_hold.max_minutes,
+                                      "positions": len(p.max_hold._positions_time)},
+                    "d1_alignment": {"actif": True, "min_body_pct": p.d1_alignment.min_body_pct},
+                    "partial_ladder": {"actif": True, "tp1_ratio": p.partial_ladder.tp1_ratio,
+                                       "tp2_ratio": p.partial_ladder.tp2_ratio},
+                    "weighted_history": {"actif": True, "multiplicateur": wh_mult, "raison": wh_raison},
                     "atr_sizing": {"actif": True, "risk_pct": 2.0, "multiplier": 1.5},
                     "trailing_paliers": {"actif": True, "palier_ratio": 1.75},
                     "drawdown": round(dd, 2),
                     "capital": round(cap, 2),
                     "plus_haut": round(ph, 2),
+                    "version": "V3",
+                    "ea_analysees": 326,
                 }
             self._json_response(data)
             return

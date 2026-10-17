@@ -170,6 +170,59 @@ def calculer_features_v2(
     mean_dev = tp.rolling(20).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
     df["cci_20"] = (tp - tp_sma) / (0.015 * mean_dev.replace(0, np.nan))
 
+    # === V3 Features — extraits de 300+ EA analysis ===
+
+    # Force Index (python-trading-robot): prix_change * volume
+    if volume is not None and not volume.isna().all():
+        fi_raw = prix.diff() * volume
+        df["force_index"] = fi_raw.ewm(span=13, adjust=False).mean() / (prix * volume.rolling(20).mean()).replace(0, np.nan)
+    else:
+        df["force_index"] = 0.0
+
+    # Chaikin Money Flow (python-trading-robot)
+    if high is not None and low is not None and volume is not None and not volume.isna().all():
+        hl = (high_ser - low_ser).replace(0, np.nan)
+        mfm = (2 * prix - high_ser - low_ser) / hl
+        mfv = mfm * volume
+        df["chaikin_mf"] = mfv.rolling(20).sum() / volume.rolling(20).sum().replace(0, np.nan)
+    else:
+        df["chaikin_mf"] = 0.0
+
+    # Bollinger Squeeze (xauusd-mt5-expert-advisor): BB inside KC
+    atr_ser = df["atr_14"] * prix
+    kc_upper = bb_ma + 1.5 * atr_ser
+    kc_lower = bb_ma - 1.5 * atr_ser
+    df["bb_squeeze"] = ((bb_upper < kc_upper) & (bb_lower > kc_lower)).astype(float)
+
+    # Mass Index (python-trading-robot): reversal bulge detector
+    if high is not None and low is not None:
+        diff_hl = high_ser - low_ser
+        ema1 = diff_hl.ewm(span=9, adjust=False).mean()
+        ema2 = ema1.ewm(span=9, adjust=False).mean()
+        ratio = ema1 / ema2.replace(0, np.nan)
+        df["mass_index"] = ratio.rolling(25).sum()
+    else:
+        df["mass_index"] = 25.0
+
+    # Stochastic cross signal (experts-master)
+    stoch_cross = pd.Series(0.0, index=prix.index)
+    if "stoch_k" in df.columns:
+        k = df["stoch_k"]
+        d = df["stoch_d"]
+        buy_sig = (d.shift(1) <= 20) & (k.shift(1) <= d.shift(1)) & (k >= d) & (k <= 20)
+        sell_sig = (d.shift(1) >= 80) & (k.shift(1) >= d.shift(1)) & (k <= d) & (k >= 80)
+        stoch_cross = buy_sig.astype(float) - sell_sig.astype(float)
+    df["stoch_cross"] = stoch_cross
+
+    # Pin-bar score (Gold_PRO_V2.mq5)
+    if open_ is not None and high is not None and low is not None:
+        body = (prix - open_).abs().clip(lower=prix * 1e-8)
+        lower_shadow = pd.concat([open_, prix], axis=1).min(axis=1) - low_ser
+        upper_shadow = high_ser - pd.concat([open_, prix], axis=1).max(axis=1)
+        df["pin_bar"] = (lower_shadow / body).clip(upper=10) - (upper_shadow / body).clip(upper=10)
+    else:
+        df["pin_bar"] = 0.0
+
     return df
 
 
