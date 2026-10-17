@@ -123,7 +123,9 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
 .cortex-lvl{flex-shrink:0;width:36px;font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.04em}
 .cortex-lvl.info{color:#0e7490}.cortex-lvl.buy{color:var(--green)}.cortex-lvl.sell{color:var(--red)}.cortex-lvl.warn{color:#b45309}.cortex-lvl.stop{color:#c2410c}.cortex-lvl.ml{color:#7c3aed}
 .cortex-mod{color:var(--gold);flex-shrink:0;width:72px;font-size:10px}
-.cortex-msg{color:var(--fg);flex:1;min-width:0}
+.cortex-msg{color:var(--fg);flex:1;min-width:0;word-break:break-word}
+.ctx-filter{padding:2px 8px;border:1px solid var(--rule);border-radius:3px;background:var(--bg);color:var(--fg2);cursor:pointer;font-family:var(--font);font-size:10px;font-weight:600;transition:all .15s}
+.ctx-filter:hover{background:var(--bg3)}.ctx-filter.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 /* === RADAR/PIE CHARTS === */
 .chart-container{position:relative;display:flex;align-items:center;justify-content:center}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -298,8 +300,37 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
       <div class="panel"><div class="panel-hdr"><span class="panel-title" style="color:#f59e0b">Secteurs Momentum</span></div><div class="panel-body"><div id="intel-sectors" style="padding:8px"><span style="color:var(--fg2)">Chargement...</span></div></div></div>
     </div>
     <div class="panel" style="margin-bottom:16px"><div class="panel-hdr"><span class="panel-title" style="color:#e040fb">Social Intelligence — Reddit</span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="social-scan-time">—</span></div><div class="panel-body" style="overflow-y:auto;max-height:200px"><table style="width:100%;border-collapse:collapse;font-size:11px" id="social-table"><thead><tr style="color:var(--fg2);border-bottom:1px solid var(--rule)"><th style="text-align:left;padding:3px 6px">Ticker</th><th style="text-align:right;padding:3px 6px">Mentions</th><th style="text-align:right;padding:3px 6px">Sentiment</th><th style="text-align:center;padding:3px 6px">Signal</th><th style="text-align:right;padding:3px 6px">Engagement</th><th style="text-align:left;padding:3px 6px">Top Post</th></tr></thead><tbody id="social-tbody"><tr><td colspan="6" style="padding:20px;color:var(--fg2);text-align:center">Scan Reddit en cours...</td></tr></tbody></table></div></div>
-    <div class="panel" style="margin-bottom:16px"><div class="panel-hdr"><span class="panel-title" style="color:#06b6d4">CORTEX — Cerveau ML</span><span class="cortex-dot"></span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="cortex-count">0 logs</span></div><div class="cortex-terminal" id="cortex-terminal"><div style="padding:20px;color:var(--fg2)">Connexion au cerveau CORTEX...</div></div></div>
-    <div id="ml-cards"></div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-hdr"><span class="panel-title" style="color:#06b6d4">CORTEX — Cerveau ML</span><span class="cortex-dot"></span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="cortex-count">0 logs</span></div>
+      <div style="display:flex;gap:4px;padding:6px 10px;border-bottom:1px solid var(--rule);flex-wrap:wrap;align-items:center">
+        <input type="text" id="cortex-search" placeholder="Rechercher logs..." oninput="filterCortex()" style="flex:1;min-width:120px;padding:4px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--bg2);color:var(--fg);font-size:11px;font-family:var(--font)">
+        <button class="ctx-filter active" data-lvl="all" onclick="setCortexFilter('all',this)">Tous</button>
+        <button class="ctx-filter" data-lvl="BUY" onclick="setCortexFilter('BUY',this)">BUY</button>
+        <button class="ctx-filter" data-lvl="SELL" onclick="setCortexFilter('SELL',this)">SELL</button>
+        <button class="ctx-filter" data-lvl="STOP" onclick="setCortexFilter('STOP',this)">STOP</button>
+        <button class="ctx-filter" data-lvl="WARN" onclick="setCortexFilter('WARN',this)">WARN</button>
+        <button class="ctx-filter" data-lvl="ML" onclick="setCortexFilter('ML',this)">ML</button>
+        <button class="ctx-filter" data-lvl="INFO" onclick="setCortexFilter('INFO',this)">INFO</button>
+      </div>
+      <div class="cortex-terminal" id="cortex-terminal"><div style="padding:20px;color:var(--fg2)">Connexion au cerveau CORTEX...</div></div>
+    </div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-hdr"><span class="panel-title" style="color:#7c3aed">Analyses ML par Actif</span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="ml-cards-count">0 actifs</span></div>
+      <div style="display:flex;gap:4px;padding:6px 10px;border-bottom:1px solid var(--rule);flex-wrap:wrap;align-items:center">
+        <input type="text" id="ml-search" placeholder="Rechercher ticker / nom..." oninput="filterMLCards()" style="flex:1;min-width:120px;padding:4px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--bg2);color:var(--fg);font-size:11px;font-family:var(--font)">
+        <select id="ml-sort" onchange="filterMLCards()" style="padding:4px 6px;border:1px solid var(--rule);border-radius:4px;background:var(--bg2);color:var(--fg);font-size:11px;font-family:var(--font)">
+          <option value="proba">Tri: Proba hausse</option>
+          <option value="alpha">Tri: A-Z</option>
+          <option value="expo">Tri: Exposition</option>
+        </select>
+        <button class="ctx-filter active" data-dec="all" onclick="setMLFilter('all',this)">Tous</button>
+        <button class="ctx-filter" data-dec="ACHAT" onclick="setMLFilter('ACHAT',this)" style="color:#0d8a40">ACHAT</button>
+        <button class="ctx-filter" data-dec="CASH" onclick="setMLFilter('CASH',this)" style="color:#c0392b">CASH</button>
+        <button class="ctx-filter" data-dec="HOLD" onclick="setMLFilter('HOLD',this)" style="color:#555">HOLD</button>
+      </div>
+      <div id="ml-cards" style="max-height:600px;overflow-y:auto"></div>
+      <div id="ml-cards-more" style="display:none;text-align:center;padding:8px"><button onclick="showMoreMLCards()" style="padding:4px 16px;border:1px solid var(--rule);border-radius:4px;background:var(--bg2);color:var(--fg);cursor:pointer;font-family:var(--font);font-size:11px">Afficher plus...</button></div>
+    </div>
   </div>
 </div>
 
@@ -880,17 +911,34 @@ function drawPie(cv,data){
 }
 
 // === CORTEX TERMINAL ===
-async function loadCortex(){
-  try{const r=await fetch(`${API_BASE}/api/terminal`);const d=await r.json();
-  const logs=d.logs||[];const el=document.getElementById('cortex-terminal');
-  document.getElementById('cortex-count').textContent=`${logs.length} logs`;
-  if(!logs.length){el.innerHTML='<div style="padding:20px;color:var(--fg2)">CORTEX en attente de donnees...</div>';return;}
-  el.innerHTML=logs.slice(-100).map(l=>{
+let cortexLogs=[],cortexFilterLevel='all';
+function setCortexFilter(lvl,btn){
+  cortexFilterLevel=lvl;
+  document.querySelectorAll('#cortex-search').forEach(()=>{});
+  btn.parentElement.querySelectorAll('.ctx-filter').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  filterCortex();
+}
+function filterCortex(){
+  const q=(document.getElementById('cortex-search').value||'').toLowerCase();
+  const el=document.getElementById('cortex-terminal');
+  let filtered=cortexLogs;
+  if(cortexFilterLevel!=='all')filtered=filtered.filter(l=>l.level===cortexFilterLevel);
+  if(q)filtered=filtered.filter(l=>(l.msg||'').toLowerCase().includes(q)||(l.module||'').toLowerCase().includes(q));
+  document.getElementById('cortex-count').textContent=`${filtered.length}/${cortexLogs.length} logs`;
+  if(!filtered.length){el.innerHTML='<div style="padding:20px;color:var(--fg2)">Aucun log correspondant</div>';return;}
+  el.innerHTML=filtered.slice(-150).map(l=>{
     const lvlCls=l.level==='BUY'?'buy':l.level==='SELL'?'sell':l.level==='STOP'?'stop':l.level==='WARN'?'warn':l.level==='ML'?'ml':'info';
     return`<div class="cortex-line"><span class="cortex-ts">${l.ts}</span><span class="cortex-lvl ${lvlCls}">${l.level}</span><span class="cortex-mod">${l.module}</span><span class="cortex-msg">${l.msg}</span></div>`;
   }).join('');
-  el.scrollTop=el.scrollHeight;}catch(e){}
+  el.scrollTop=el.scrollHeight;
 }
+async function loadCortex(){
+  try{const r=await fetch(`${API_BASE}/api/terminal`);const d=await r.json();
+  cortexLogs=d.logs||[];filterCortex();
+  }catch(e){}
+}
+if(document.readyState==='complete')loadCortex();else window.addEventListener('load',loadCortex);
 
 // === MARKET INTEL ===
 async function loadIntel(){
@@ -934,11 +982,49 @@ async function loadSocial(){
 }
 
 // === ML TAB ===
+let mlData={},mlStats={},mlBenchmarks={},mlFilterDec='all',mlVisibleCount=20;
+function setMLFilter(dec,btn){
+  mlFilterDec=dec;mlVisibleCount=20;
+  btn.parentElement.querySelectorAll('.ctx-filter').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  filterMLCards();
+}
+function showMoreMLCards(){mlVisibleCount+=20;filterMLCards();}
+function buildMLCard(sym,info,bench,posInfo){
+  const dc=info.decision==='ACHAT'?'var(--green)':info.decision==='CASH'?'var(--red)':'var(--fg2)';
+  let fiH='';for(const[feat,imp]of Object.entries(info.feature_importance||{}).slice(0,8)){const hue=imp>15?'45':imp>8?'200':'0';fiH+=`<div class="bar-row"><div class="bar-label">${feat}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.min(imp*2,100)}%;background:hsl(${hue},60%,50%)"></div></div><div class="bar-val">${imp}%</div></div>`;}
+  let bH='';
+  for(const[cn,cr]of Object.entries(bench||{})){const ib=(info.meilleur_modele===cn);bH+=`<div style="display:flex;gap:8px;padding:3px 6px;font-size:10px;${ib?'background:var(--gold-dim);border-left:2px solid var(--gold)':''}"><span style="flex:1;font-weight:${ib?700:400}">${cn}</span><span>Acc: ${cr.accuracy}%</span><span style="color:var(--fg2)">LL: ${cr.log_loss}</span><span style="color:${cr.proba_hausse>=50?'var(--green)':'var(--red)'}">${cr.proba_hausse}%</span></div>`;}
+  let posTag='';if(posInfo&&posInfo.en_position){posTag=`<span style="font-size:10px;color:var(--fg2);margin-left:8px">SL: $${(posInfo.stop_loss||0).toFixed(2)} · TP: $${(posInfo.take_profit||0).toFixed(2)}</span>`;}
+  return`<div class="panel" style="margin-bottom:8px"><div class="panel-hdr"><div><span class="panel-title">${sym} — ${info.nom||''}</span><span class="pill" style="margin-left:8px;border-color:${dc};color:${dc}">${info.decision}</span>${posTag}</div><span style="font-size:18px;font-weight:700">$${(info.prix||0).toFixed(2)}</span></div><div class="panel-body"><div class="grid-2"><div><div style="display:flex;gap:12px;margin-bottom:8px"><div style="text-align:center"><div style="font-size:20px;font-weight:700;color:var(--green)">${info.proba_hausse||0}%</div><div style="font-size:9px;color:var(--fg2)">HAUSSE</div></div><div style="text-align:center"><div style="font-size:20px;font-weight:700;color:var(--red)">${info.proba_baisse||0}%</div><div style="font-size:9px;color:var(--fg2)">BAISSE</div></div><div style="text-align:center"><div style="font-size:20px;font-weight:700;color:var(--gold)">${info.exposition||0}%</div><div style="font-size:9px;color:var(--fg2)">EXPO</div></div></div>${bH?`<div style="margin-top:6px"><div style="font-size:9px;color:var(--fg2);text-transform:uppercase;margin-bottom:3px">Benchmark</div>${bH}</div>`:''}</div><div><div style="font-size:9px;color:var(--fg2);text-transform:uppercase;margin-bottom:3px">Features</div>${fiH}</div></div></div></div>`;
+}
+function filterMLCards(){
+  const q=(document.getElementById('ml-search').value||'').toLowerCase();
+  const sort=document.getElementById('ml-sort').value;
+  let entries=Object.entries(mlData);
+  if(mlFilterDec!=='all')entries=entries.filter(([,info])=>info.decision===mlFilterDec);
+  if(q)entries=entries.filter(([sym,info])=>sym.toLowerCase().includes(q)||(info.nom||'').toLowerCase().includes(q));
+  if(sort==='proba')entries.sort((a,b)=>(b[1].proba_hausse||0)-(a[1].proba_hausse||0));
+  else if(sort==='alpha')entries.sort((a,b)=>a[0].localeCompare(b[0]));
+  else if(sort==='expo')entries.sort((a,b)=>(b[1].exposition||0)-(a[1].exposition||0));
+  const total=entries.length;
+  const visible=entries.slice(0,mlVisibleCount);
+  document.getElementById('ml-cards-count').textContent=`${total} actifs`;
+  const el=document.getElementById('ml-cards');
+  if(!visible.length){el.innerHTML='<div style="color:var(--fg2);padding:20px;text-align:center">Aucun actif correspondant</div>';document.getElementById('ml-cards-more').style.display='none';return;}
+  el.innerHTML=visible.map(([sym,info])=>{
+    const bench=(mlBenchmarks||{})[sym]||{};
+    const posInfo=mlStats.positions&&mlStats.positions[sym];
+    return buildMLCard(sym,info,bench,posInfo);
+  }).join('');
+  document.getElementById('ml-cards-more').style.display=total>mlVisibleCount?'block':'none';
+}
 async function loadML(){
   try{
   loadIntel();loadSocial();
   const[rml,rstats,rterm]=await Promise.all([fetch(`${API_BASE}/api/ml`),fetch(`${API_BASE}/api/stats`),fetch(`${API_BASE}/api/terminal`)]);
   const d=await rml.json();const stats=await rstats.json();const term=await rterm.json();
+  mlData=d.actifs||{};mlStats=stats;mlBenchmarks=d.benchmark_classifieurs||{};
   document.getElementById('ml-info-row').innerHTML=[kpiHTML('Moteur CORTEX',d.modele||'Deep Ensemble',`${d.nb_features||31} features`),kpiHTML('Walk-Forward',`${d.taille_train||252}j`,`Refit: ${d.pas_reentrain||21}j`),kpiHTML('Classifieurs','6','LSTM+GRU+RF+LGB+XGB+GBM'),kpiHTML('Mise a jour',d.timestamp||'—','')].join('');
   const wr=stats.win_rate||0;const pf=stats.gain_total&&stats.perte_totale?Math.abs(stats.gain_total/Math.max(0.01,stats.perte_totale)):0;
   const avgWin=stats.trades_gagnants>0?(stats.gain_total/stats.trades_gagnants):0;
@@ -961,21 +1047,9 @@ async function loadML(){
     `<div class="stat-item"><div class="stat-label">Perte Moyenne</div><div class="stat-val neg">$${avgLoss.toFixed(2)}</div></div>`,
     `<div class="stat-item"><div class="stat-label">Positions Actives</div><div class="stat-val">${stats.positions_actives||0}</div></div>`,
   ].join('');
-  const logs=term.logs||[];const tel=document.getElementById('cortex-terminal');
-  document.getElementById('cortex-count').textContent=`${logs.length} logs`;
-  if(logs.length){tel.innerHTML=logs.slice(-100).map(l=>{
-    const lvlCls=l.level==='BUY'?'buy':l.level==='SELL'?'sell':l.level==='STOP'?'stop':l.level==='WARN'?'warn':l.level==='ML'?'ml':'info';
-    return`<div class="cortex-line"><span class="cortex-ts">${l.ts}</span><span class="cortex-lvl ${lvlCls}">${l.level}</span><span class="cortex-mod">${l.module}</span><span class="cortex-msg">${l.msg}</span></div>`;}).join('');tel.scrollTop=tel.scrollHeight;}else{tel.innerHTML='<div style="padding:20px;color:var(--fg2)">CORTEX en attente de donnees...</div>';}
-  let cards='';
-  for(const[sym,info]of Object.entries(d.actifs||{})){
-    const dc=info.decision==='ACHAT'?'var(--green)':info.decision==='CASH'?'var(--red)':'var(--fg2)';
-    let fiH='';for(const[feat,imp]of Object.entries(info.feature_importance||{}).slice(0,12)){const hue=imp>15?'45':imp>8?'200':'0';fiH+=`<div class="bar-row"><div class="bar-label">${feat}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.min(imp*2,100)}%;background:hsl(${hue},60%,50%)"></div></div><div class="bar-val">${imp}%</div></div>`;}
-    const bench=(d.benchmark_classifieurs||{})[sym]||{};let bH='';
-    for(const[cn,cr]of Object.entries(bench)){const ib=(info.meilleur_modele===cn);bH+=`<div style="display:flex;gap:8px;padding:3px 6px;font-size:10px;${ib?'background:var(--gold-dim);border-left:2px solid var(--gold)':''}"><span style="flex:1;font-weight:${ib?700:400}">${cn}</span><span>Acc: ${cr.accuracy}%</span><span style="color:var(--fg2)">LL: ${cr.log_loss}</span><span style="color:${cr.proba_hausse>=50?'var(--green)':'var(--red)'}">${cr.proba_hausse}%</span></div>`;}
-    const posInfo=stats.positions&&stats.positions[sym];
-    let posTag='';if(posInfo&&posInfo.en_position){posTag=`<span style="font-size:10px;color:var(--fg2);margin-left:8px">SL: $${(posInfo.stop_loss||0).toFixed(2)} · TP: $${(posInfo.take_profit||0).toFixed(2)}</span>`;}
-    cards+=`<div class="panel"><div class="panel-hdr"><div><span class="panel-title">${sym} — ${info.nom||''}</span><span class="pill" style="margin-left:8px;border-color:${dc};color:${dc}">${info.decision}</span>${posTag}</div><span style="font-size:18px;font-weight:700">$${(info.prix||0).toFixed(2)}</span></div><div class="panel-body"><div class="grid-2"><div><div style="margin-bottom:8px;font-size:11px;color:var(--fg2);text-transform:uppercase">Probabilite</div><div style="display:flex;gap:12px;margin-bottom:12px"><div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--green)">${info.proba_hausse||0}%</div><div style="font-size:9px;color:var(--fg2)">HAUSSE</div></div><div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--red)">${info.proba_baisse||0}%</div><div style="font-size:9px;color:var(--fg2)">BAISSE</div></div><div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--gold)">${info.exposition||0}%</div><div style="font-size:9px;color:var(--fg2)">EXPOSITION</div></div></div>${bH?`<div style="margin-top:10px"><div style="font-size:10px;color:var(--fg2);text-transform:uppercase;margin-bottom:4px">Benchmark</div>${bH}</div>`:''}</div><div><div style="margin-bottom:8px;font-size:11px;color:var(--fg2);text-transform:uppercase">Feature Importance</div>${fiH}</div></div></div></div>`;}
-  document.getElementById('ml-cards').innerHTML=cards||'<div style="color:var(--fg2);padding:20px">En attente de donnees ML...</div>';}catch(e){console.error('loadML error:',e);}
+  cortexLogs=term.logs||[];filterCortex();
+  filterMLCards();
+  }catch(e){console.error('loadML error:',e);}
 }
 
 // === AUTO-TRADE DISPLAY ===
