@@ -691,23 +691,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
             return
 
-        if path == "/mt" or path == "/terminal":
-            self.path = "/dashboard_mt.html"
-            super().do_GET()
-            return
-
         if path == "/ml":
             self.path = "/dashboard_ml.html"
             super().do_GET()
             return
 
-        if path == "/old":
-            self.path = "/dashboard_realtime.html"
+        if path == "/old" or path == "/v1":
+            self.path = "/dashboard_mega.html"
             super().do_GET()
             return
 
-        if path == "/" or path == "":
-            self.path = "/dashboard_mega.html"
+        if path == "/" or path == "" or path == "/mt" or path == "/terminal":
+            self.path = "/dashboard_mt.html"
         super().do_GET()
 
     def log_message(self, fmt, *args):
