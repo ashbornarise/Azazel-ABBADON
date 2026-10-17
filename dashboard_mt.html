@@ -1181,10 +1181,45 @@ function fetchShield(){
         `Lot x${wh.multiplicateur}`,
         wh.raison));
     }
+    if(d.breakout_retest){
+      cards.push(shieldCard('Breakout Retest',true,
+        `Max ext: ${d.breakout_retest.max_ext_atr} ATR`,
+        `${d.breakout_retest.pending} retest(s) en attente`));
+    }
+    if(d.orb_half_range){
+      cards.push(shieldCard('ORB Half-Range',true,
+        'Breakout = direction du close',
+        'Top half=longs, Bottom=shorts'));
+    }
+    if(d.fib_trailing_bb){
+      cards.push(shieldCard('Fib Trail BB',true,
+        `Niveaux: ${d.fib_trailing_bb.fibs}`,
+        'SL via Fib dans Bollinger'));
+    }
+    if(d.adaptive_trailing){
+      cards.push(shieldCard('Adaptive Trail',true,
+        `Minor: ${d.adaptive_trailing.minor}`,
+        `Major: ${d.adaptive_trailing.major}`));
+    }
+    if(d.ichimoku_sl){
+      cards.push(shieldCard('Ichimoku SL',true,
+        d.ichimoku_sl.components,
+        'SL dynamique dans le nuage'));
+    }
+    if(d.asian_breakout){
+      cards.push(shieldCard('Asian Breakout',true,
+        `Session: ${d.asian_breakout.session}`,
+        'Range H/L + breakout signal'));
+    }
+    if(d.walk_forward){
+      cards.push(shieldCard('Walk-Forward',true,
+        `Train: ${(d.walk_forward.train_ratio*100)}% | Cost: ${d.walk_forward.cost}`,
+        'Validation OOS anti-overfit'));
+    }
     g.innerHTML=cards.join('');
     const vLabel=d.version?` ${d.version}`:'';
-    const eaLabel=d.ea_analysees?` (${d.ea_analysees} EAs)`:''
-    document.getElementById('shield-panel').querySelector('.panel-title').textContent='Bouclier Survie'+vLabel+eaLabel;
+    const countLabel=d.nb_protections?` — ${d.nb_protections} protections, ${d.nb_features||40} features`:'';
+    document.getElementById('shield-panel').querySelector('.panel-title').textContent='Bouclier Survie'+vLabel+countLabel;
     const nb=d.circuit_breaker.bloque||dl.bloque||d.stoploss_guard.bloque?1:0;
     document.getElementById('shield-status').textContent=nb?'ALERTE':'Tous systemes OK';
     document.getElementById('shield-status').style.color=nb?'#c0392b':'#0d8a40';

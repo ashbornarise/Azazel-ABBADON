@@ -33,7 +33,10 @@ from src.ml.protections import (
     calculer_tp_structurel, position_sizing_atr, trailing_paliers,
     bollinger_squeeze_gate, mass_index_reversal, force_index,
     chaikin_money_flow, pin_bar_score, stochastic_signal,
-    calculer_stochastic,
+    calculer_stochastic, orb_half_range_filter,
+    fibonacci_trailing_bb, adaptive_time_trailing,
+    ichimoku_dynamic_sl, calculer_ichimoku,
+    walk_forward_backtest, asian_range_breakout,
 )
 from src.ml.multi_classifier import benchmark_classifieurs, seuil_dynamique
 from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
@@ -207,7 +210,7 @@ etat = {
 ml_etat = {
     "actifs": {},
     "timestamp": "-",
-    "nb_features": 37,
+    "nb_features": 40,
     "modele": "Deep Ensemble (LSTM+GRU+RF+LightGBM+XGBoost+GBM)",
     "arbres": 100,
     "walk_forward": True,
@@ -227,6 +230,7 @@ ml_etat = {
         "pattern_score", "engulfing", "macd_cross", "cci_20",
         "force_index", "chaikin_mf", "bb_squeeze",
         "mass_index", "stoch_cross", "pin_bar",
+        "ichimoku_pos", "tenkan_kijun", "fib_retrace",
     ],
     "protections": {
         "max_drawdown": "-5%",
@@ -245,6 +249,13 @@ ml_etat = {
         "d1_alignment": "skip entries contre D1",
         "partial_ladder": "40/30/30 aux paliers TP",
         "weighted_history": "lot adapte aux 3 derniers trades",
+        "orb_half_range": "breakout dans direction du close range",
+        "breakout_retest": "retest si extension > 0.85 ATR",
+        "fib_trailing_bb": "trail SL par Fib levels dans BB",
+        "adaptive_trailing": "minor (1-3 bars) / major (4+)",
+        "ichimoku_sl": "SL dynamique dans le nuage",
+        "walk_forward": "validation OOS avec couts",
+        "asian_breakout": "range 22h-7h UTC breakout",
     },
     "seuils_dynamiques": {},
     "benchmark_classifieurs": {},
@@ -1079,11 +1090,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "weighted_history": {"actif": True, "multiplicateur": wh_mult, "raison": wh_raison},
                     "atr_sizing": {"actif": True, "risk_pct": 2.0, "multiplier": 1.5},
                     "trailing_paliers": {"actif": True, "palier_ratio": 1.75},
+                    "breakout_retest": {"actif": True, "max_ext_atr": p.breakout_retest.max_extension_atr,
+                                        "pending": len(p.breakout_retest._pending)},
+                    "orb_half_range": {"actif": True},
+                    "fib_trailing_bb": {"actif": True, "fibs": "0.236/0.382/0.5/0.618"},
+                    "adaptive_trailing": {"actif": True, "minor": "1-3 bars", "major": "4+ bars"},
+                    "ichimoku_sl": {"actif": True, "components": "Tenkan/Kijun/SpanA/SpanB"},
+                    "asian_breakout": {"actif": True, "session": "22h-07h UTC"},
+                    "walk_forward": {"actif": True, "train_ratio": 0.7, "cost": 0.001},
                     "drawdown": round(dd, 2),
                     "capital": round(cap, 2),
                     "plus_haut": round(ph, 2),
-                    "version": "V3",
+                    "version": "V3.1",
                     "ea_analysees": 326,
+                    "nb_protections": 18,
+                    "nb_features": 40,
                 }
             self._json_response(data)
             return

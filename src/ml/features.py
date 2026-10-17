@@ -223,6 +223,29 @@ def calculer_features_v2(
     else:
         df["pin_bar"] = 0.0
 
+    # Ichimoku Cloud position (MT4-MT5-Trading-EA-Collections)
+    if high is not None and low is not None:
+        def _midpoint(s, p):
+            return (s.rolling(p).max() + s.rolling(p).min()) / 2
+        tenkan = _midpoint(high_ser, 9)
+        kijun = _midpoint(high_ser, 26)
+        span_a = (tenkan + kijun) / 2
+        span_b = _midpoint(high_ser, 52)
+        cloud_top = pd.concat([span_a, span_b], axis=1).max(axis=1)
+        cloud_bot = pd.concat([span_a, span_b], axis=1).min(axis=1)
+        cloud_width = (cloud_top - cloud_bot).replace(0, np.nan)
+        df["ichimoku_pos"] = (prix - cloud_bot) / cloud_width
+        df["tenkan_kijun"] = (tenkan - kijun) / prix
+    else:
+        df["ichimoku_pos"] = 0.5
+        df["tenkan_kijun"] = 0.0
+
+    # Fibonacci retracement level (DayTradingEA_v2)
+    high20 = high_ser.rolling(20).max() if high is not None else prix.rolling(20).max()
+    low20 = low_ser.rolling(20).min() if low is not None else prix.rolling(20).min()
+    fib_range = (high20 - low20).replace(0, np.nan)
+    df["fib_retrace"] = (prix - low20) / fib_range
+
     return df
 
 

@@ -591,6 +591,238 @@ def calculer_stochastic(highs: list, lows: list, closes: list,
     return k_now, d_now
 
 
+def orb_half_range_filter(range_high: float, range_low: float,
+                          range_close: float, is_buy: bool) -> tuple[bool, str]:
+    """N'autorise le breakout que dans la direction ou le range a cloture.
+    Top half = longs, bottom half = shorts. +0.615R/trade correct vs +0.049R wrong.
+    Inspire de ORB.mq5 (orb-mt5-main)."""
+    if range_high <= range_low:
+        return True, ""
+    close_pos = (range_close - range_low) / (range_high - range_low)
+    if is_buy and close_pos < 0.50:
+        return False, f"ORB HalfRange: achat bloque, close en bas du range ({close_pos:.0%})"
+    if not is_buy and close_pos >= 0.50:
+        return False, f"ORB HalfRange: vente bloquee, close en haut du range ({close_pos:.0%})"
+    return True, ""
+
+
+@dataclass
+class BreakoutRetestGuard:
+    """Si le prix s'etend trop loin d'un breakout (>max_ext ATR), attend un retest.
+    Inspire de RB_XAUUSD_MT5.mq5 (xauusd-mt5-expert-advisor)."""
+    max_extension_atr: float = 0.85
+    retest_window_bars: int = 8
+    retest_zone_atr: float = 0.45
+
+    _pending: dict = field(default_factory=dict, init=False, repr=False)
+
+    def evaluer_breakout(self, sym: str, breakout_level: float, prix: float,
+                         atr: float) -> str:
+        if atr <= 0:
+            return "ENTER"
+        extension = abs(prix - breakout_level) / atr
+        if extension > self.max_extension_atr:
+            self._pending[sym] = {
+                "level": breakout_level, "atr": atr,
+                "bars_restants": self.retest_window_bars,
+            }
+            return "WAIT_RETEST"
+        return "ENTER"
+
+    def verifier_retest(self, sym: str, close: float, low: float,
+                        high: float) -> str:
+        if sym not in self._pending:
+            return "NO_PENDING"
+        p = self._pending[sym]
+        p["bars_restants"] -= 1
+        if p["bars_restants"] <= 0:
+            del self._pending[sym]
+            return "EXPIRED"
+        zone = p["atr"] * self.retest_zone_atr
+        touched = low <= p["level"] + zone and high >= p["level"] - zone
+        resumed = close > p["level"]
+        if touched and resumed:
+            del self._pending[sym]
+            return "ENTER"
+        return "WAITING"
+
+
+def fibonacci_trailing_bb(entry: float, ema: float, bb_upper: float,
+                          bb_lower: float, close: float, current_sl: float,
+                          is_buy: bool) -> tuple[float, float]:
+    """Trail le SL a travers les niveaux Fib (0.236, 0.382, 0.5, 0.618) de EMA-to-BB.
+    Etend dynamiquement le TP quand la bande opposee s'ecarte.
+    Inspire de DayTradingEA_v2.mq5 (mql5_ea-main)."""
+    fibs = [0.236, 0.382, 0.5, 0.618]
+    new_sl = current_sl
+    for f in fibs:
+        if is_buy:
+            target = ema + f * (bb_upper - ema)
+            if close > target and target > new_sl:
+                new_sl = target
+        else:
+            target = ema - f * (ema - bb_lower)
+            if close < target and (new_sl == 0 or target < new_sl):
+                new_sl = target
+    new_tp = bb_upper if is_buy else bb_lower
+    return round(new_sl, 6), round(new_tp, 6)
+
+
+def adaptive_time_trailing(candles_open: int, entry: float, current_price: float,
+                           last_candle_range: float, trail_distance: float,
+                           current_sl: float) -> float:
+    """Trailing en 2 phases selon l'age de la position.
+    Phase minor (1-3 bougies): SL a entry + trail_distance.
+    Phase major (4+): SL = max(prix - candle_range, prix - trail_distance).
+    Inspire de fxchartai_openea.mq5 (openea-main)."""
+    if current_price <= entry:
+        return current_sl
+    if 1 <= candles_open <= 3:
+        minor_sl = entry + trail_distance * 0.3
+        return max(current_sl, round(minor_sl, 6))
+    if candles_open >= 4:
+        candle_sl = current_price - last_candle_range
+        pips_sl = current_price - trail_distance
+        major_sl = max(candle_sl, pips_sl)
+        return max(current_sl, round(major_sl, 6))
+    return current_sl
+
+
+def ichimoku_dynamic_sl(span_a: float, span_b: float, kijun: float,
+                        is_buy: bool) -> float:
+    """Place le SL au meilleur support structurel dans le nuage Ichimoku.
+    Inspire de E_EntriesManagement.mqh (MT4-MT5-Trading-EA-Collections)."""
+    if is_buy:
+        if span_b < span_a:
+            return min(span_b, kijun)
+        return span_a
+    else:
+        if span_b > span_a:
+            return max(span_b, kijun)
+        return span_a
+
+
+def calculer_ichimoku(highs: list, lows: list, closes: list,
+                      tenkan_p: int = 9, kijun_p: int = 26,
+                      senkou_b_p: int = 52) -> dict:
+    """Calcule les 5 lignes Ichimoku a partir de listes OHLC."""
+    def midpoint(data, period):
+        if len(data) < period:
+            return 0.0
+        segment = data[-period:]
+        return (max(segment) + min(segment)) / 2.0
+
+    tenkan = midpoint(highs, tenkan_p) if len(highs) >= tenkan_p else 0.0
+    kijun = midpoint(highs, kijun_p) if len(highs) >= kijun_p else 0.0
+
+    tenkan_low = midpoint(lows, tenkan_p) if len(lows) >= tenkan_p else 0.0
+    kijun_low = midpoint(lows, kijun_p) if len(lows) >= kijun_p else 0.0
+    tenkan = (tenkan + tenkan_low) / 2
+    kijun = (kijun + kijun_low) / 2
+
+    span_a = (tenkan + kijun) / 2
+    span_b_h = midpoint(highs, senkou_b_p) if len(highs) >= senkou_b_p else 0.0
+    span_b_l = midpoint(lows, senkou_b_p) if len(lows) >= senkou_b_p else 0.0
+    span_b = (span_b_h + span_b_l) / 2
+
+    chikou = closes[-1] if closes else 0.0
+
+    return {
+        "tenkan": round(tenkan, 6),
+        "kijun": round(kijun, 6),
+        "span_a": round(span_a, 6),
+        "span_b": round(span_b, 6),
+        "chikou": round(chikou, 6),
+    }
+
+
+def walk_forward_backtest(returns: list, positions: list, cost_per_trade: float = 0.001,
+                          train_ratio: float = 0.7) -> dict:
+    """Walk-forward validation avec modele de couts (spread + slippage).
+    Inspire de backtest.py (Robot_Trading_Brief).
+    Retourne CAGR, Sharpe, max DD sur la partie out-of-sample."""
+    import math
+    n = len(returns)
+    if n < 20 or len(positions) != n:
+        return {"sharpe": 0.0, "max_dd": 0.0, "cagr": 0.0, "oos_trades": 0}
+
+    split = int(n * train_ratio)
+    oos_ret = returns[split:]
+    oos_pos = positions[split:]
+
+    strat_returns = []
+    trades = 0
+    for i in range(len(oos_ret)):
+        pos_change = abs(oos_pos[i] - (oos_pos[i - 1] if i > 0 else 0))
+        cost = pos_change * cost_per_trade
+        r = oos_pos[i] * oos_ret[i] - cost
+        strat_returns.append(r)
+        if pos_change > 0:
+            trades += 1
+
+    if not strat_returns:
+        return {"sharpe": 0.0, "max_dd": 0.0, "cagr": 0.0, "oos_trades": 0}
+
+    mean_r = sum(strat_returns) / len(strat_returns)
+    var_r = sum((r - mean_r) ** 2 for r in strat_returns) / len(strat_returns)
+    std_r = var_r ** 0.5 if var_r > 0 else 1e-10
+    sharpe = mean_r / std_r * (252 ** 0.5)
+
+    equity = [1.0]
+    for r in strat_returns:
+        equity.append(equity[-1] * (1 + r))
+    peak = equity[0]
+    max_dd = 0.0
+    for e in equity:
+        if e > peak:
+            peak = e
+        dd = (e - peak) / peak
+        if dd < max_dd:
+            max_dd = dd
+
+    total_return = equity[-1] / equity[0]
+    years = len(oos_ret) / 252
+    cagr = (total_return ** (1 / years) - 1) * 100 if years > 0 and total_return > 0 else 0.0
+
+    return {
+        "sharpe": round(sharpe, 2),
+        "max_dd": round(max_dd * 100, 2),
+        "cagr": round(cagr, 2),
+        "oos_trades": trades,
+    }
+
+
+def asian_range_breakout(highs_session: list, lows_session: list,
+                         current_price: float,
+                         tp_multiplier: float = 1.5) -> dict:
+    """Calcule le range de la session asiatique (22h-7h UTC) et genere les signaux breakout.
+    Inspire de DL_TradingBoundaries.mqh (MT4-MT5-Trading-EA-Collections)."""
+    if not highs_session or not lows_session:
+        return {"signal": 0, "upper": 0, "lower": 0, "tp": 0, "sl": 0}
+    upper = max(highs_session)
+    lower = min(lows_session)
+    scope = upper - lower
+    if scope <= 0:
+        return {"signal": 0, "upper": upper, "lower": lower, "tp": 0, "sl": 0}
+    if current_price > upper:
+        return {
+            "signal": 1,
+            "upper": round(upper, 6),
+            "lower": round(lower, 6),
+            "tp": round(current_price + scope * tp_multiplier, 6),
+            "sl": round(lower, 6),
+        }
+    if current_price < lower:
+        return {
+            "signal": -1,
+            "upper": round(upper, 6),
+            "lower": round(lower, 6),
+            "tp": round(current_price - scope * tp_multiplier, 6),
+            "sl": round(upper, 6),
+        }
+    return {"signal": 0, "upper": round(upper, 6), "lower": round(lower, 6), "tp": 0, "sl": 0}
+
+
 class GestionnaireProtections:
     """Centralise toutes les protections."""
 
@@ -626,6 +858,7 @@ class GestionnaireProtections:
         self.d1_alignment = D1AlignmentFilter(min_body_pct=0.3)
         self.partial_ladder = PartialCloseLadder()
         self.weighted_history = WeightedHistoryScore()
+        self.breakout_retest = BreakoutRetestGuard()
 
     def peut_trader(self, sym: str, drawdown_pct: float,
                     capital: float = 0.0, plus_haut: float = 0.0,
