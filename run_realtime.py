@@ -183,6 +183,28 @@ def charger_historique():
     return []
 
 
+def charger_etat():
+    if ETAT_PATH.exists():
+        try:
+            with open(ETAT_PATH) as f:
+                saved = json.load(f)
+            keys_to_restore = [
+                "capital", "capital_initial", "cash", "valeur_positions",
+                "pnl", "pnl_pct", "drawdown", "plus_haut",
+                "nb_trades", "trades_gagnants", "trades_perdants",
+                "gain_total", "perte_totale",
+                "positions", "equity", "timestamps_equity",
+            ]
+            for k in keys_to_restore:
+                if k in saved:
+                    etat[k] = saved[k]
+            print(f"[STATE] Etat restaure: ${etat['capital']:.2f} capital, {sum(1 for p in etat['positions'].values() if p.get('en_position'))} positions actives")
+            return True
+        except Exception as e:
+            print(f"[STATE] Erreur chargement etat: {e}")
+    return False
+
+
 def sauver_historique(trades):
     HISTORY_PATH.parent.mkdir(exist_ok=True)
     with open(HISTORY_PATH, "w") as f:
@@ -711,6 +733,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     ETAT_PATH.parent.mkdir(exist_ok=True)
+    charger_etat()
     saved_trades = charger_historique()
     if saved_trades:
         etat["trades"] = saved_trades
