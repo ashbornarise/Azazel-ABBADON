@@ -28,6 +28,8 @@ from src.ml.features import calculer_features, calculer_features_v2
 from src.ml.protections import GestionnaireProtections
 from src.ml.multi_classifier import benchmark_classifieurs, seuil_dynamique
 from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
+from src.ml.market_intel import MarketIntelligence
+from src.ml.deep_model import DeepEnsemble
 from src.strategies.ml_strategy import MLStrategy
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
@@ -135,7 +137,7 @@ ml_etat = {
     "actifs": {},
     "timestamp": "-",
     "nb_features": 31,
-    "modele": "Multi-Classifier (RF+LightGBM+XGBoost+GBM)",
+    "modele": "Deep Ensemble (LSTM+GRU+RF+LightGBM+XGBoost+GBM)",
     "arbres": 100,
     "walk_forward": True,
     "taille_train": 252,
@@ -179,6 +181,10 @@ probas_historiques = {}
 hyperopt_cache = {}
 hyperopt_derniere_run = {}
 HYPEROPT_INTERVAL = 3600
+
+market_intel = MarketIntelligence(ACTIFS)
+deep_models = {}
+DEEP_RETRAIN_INTERVAL = 1800
 
 cortex_logs = []
 MAX_CORTEX_LOGS = 200
@@ -655,7 +661,13 @@ def analyser_et_trader():
             pos = etat["positions"].get(sym, {})
 
             if decision == "ACHAT" and not pos.get("en_position"):
-                boost = MARCHES_PRIORITAIRES.get(sym, 1.0)
+                growth_ratio = etat["capital"] / CAPITAL_INIT
+                if growth_ratio >= 1.0:
+                    kelly = min(1.0 + (growth_ratio - 1.0) * 0.5, 2.0)
+                else:
+                    kelly = max(0.5, growth_ratio)
+                intel_boost = market_intel.get_boost_dynamique(sym) if market_intel.last_scan else 1.0
+                boost = MARCHES_PRIORITAIRES.get(sym, 1.0) * intel_boost * kelly
                 alloc = min(BASE_ALLOC * boost, MAX_ALLOC)
                 montant = etat["cash"] * alloc
                 if montant >= 1:
@@ -683,8 +695,8 @@ def analyser_et_trader():
                         "capital": round(etat["cash"], 2),
                     })
                     protections.apres_trade(sym, 0.0)
-                    cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% >= {seuil_a}% | SL={prix_actuel*0.95:.2f} TP={prix_actuel*1.08:.2f}")
-                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% >= seuil {seuil_a}%) [SL a {prix_actuel * 0.95:.2f}]")
+                    cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% >= {seuil_a}% | Kelly={kelly:.2f} Intel={intel_boost:.2f} | SL={prix_actuel*0.95:.2f} TP={prix_actuel*1.08:.2f}")
+                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% | Kelly={kelly:.2f} Intel={intel_boost:.2f}) [SL a {prix_actuel * 0.95:.2f}]")
                 else:
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
 
@@ -754,6 +766,25 @@ def loop_trade():
             analyser_et_trader()
         except Exception as e:
             print(f"[TRADE] Erreur globale: {e}")
+
+
+def loop_intel():
+    time.sleep(10)
+    while True:
+        try:
+            cortex_log("INFO", "INTEL", "Scan momentum marches en cours...")
+            results = market_intel.scanner_momentum()
+            top = market_intel.top_movers
+            top_name = top[0]["nom"] if top else "N/A"
+            top_mom = top[0]["momentum"] if top else 0
+            cortex_log("INFO", "INTEL", f"Scan OK: {len(results)} actifs | Top={top_name} ({top_mom:+.1f}) | Secteurs={market_intel.sector_momentum}")
+            opps = market_intel.get_top_opportunities(5)
+            if opps:
+                noms = ", ".join(o["nom"] for o in opps)
+                cortex_log("ML", "INTEL", f"Opportunites: {noms}")
+        except Exception as e:
+            cortex_log("ERR", "INTEL", f"Erreur scan: {e}")
+        time.sleep(180)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -836,6 +867,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json_response(stats)
             return
 
+        if path == "/api/intel":
+            data = market_intel.to_dict()
+            data["opportunities"] = market_intel.get_top_opportunities(10)
+            self._json_response(data)
+            return
+
+        if path == "/api/deep":
+            breakdown = {}
+            for sym, model in deep_models.items():
+                if model.trained:
+                    nom = ACTIFS.get(sym, sym)
+                    prices = etat.get("prix_historique", {}).get(sym, [])
+                    if len(prices) > 60:
+                        price_vals = [p[1] for p in prices]
+                        pred = model.predict(price_vals)
+                        bd = model.get_model_breakdown(price_vals)
+                        breakdown[sym] = {"nom": nom, "prediction": pred, "models": bd}
+            self._json_response({"models": breakdown, "total_trained": len(deep_models)})
+            return
+
         if path == "/api/history":
             trades = charger_historique()
             page = int(params.get("page", ["1"])[0])
@@ -889,6 +940,9 @@ def main():
 
     threading.Thread(target=loop_prix, daemon=True).start()
     print("[PRIX] Rafraichissement toutes les 30 secondes")
+
+    threading.Thread(target=loop_intel, daemon=True).start()
+    print("[INTEL] Market Intelligence: scan toutes les 3 minutes")
 
     print(f"[TRADE] Intervalle: {TRADE_INTERVAL}s ({TRADE_INTERVAL//60} min)")
     print("[TRADE] Premiere analyse en cours...")

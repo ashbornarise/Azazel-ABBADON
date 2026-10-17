@@ -243,6 +243,10 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
       <div class="panel"><div class="panel-hdr"><span class="panel-title">Allocation Secteurs</span></div><div class="panel-body chart-container"><canvas id="chart-pie" width="280" height="280"></canvas></div></div>
       <div class="panel"><div class="panel-hdr"><span class="panel-title">Statistiques</span></div><div class="panel-body"><div class="stats-grid" id="stats-grid"></div></div></div>
     </div>
+    <div class="ml-grid-3" style="margin-bottom:16px">
+      <div class="panel" style="grid-column:span 2"><div class="panel-hdr"><span class="panel-title" style="color:#f59e0b">Market Intelligence</span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="intel-scan-time">—</span></div><div class="panel-body" style="overflow-y:auto;max-height:220px"><table style="width:100%;border-collapse:collapse;font-size:11px" id="intel-table"><thead><tr style="color:var(--fg2);border-bottom:1px solid var(--rule)"><th style="text-align:left;padding:3px 6px">Actif</th><th style="text-align:right;padding:3px 6px">1h</th><th style="text-align:right;padding:3px 6px">4h</th><th style="text-align:right;padding:3px 6px">24h</th><th style="text-align:right;padding:3px 6px">Vol</th><th style="text-align:right;padding:3px 6px">RSI</th><th style="text-align:right;padding:3px 6px">Score</th></tr></thead><tbody id="intel-tbody"><tr><td colspan="7" style="padding:20px;color:var(--fg2);text-align:center">Scan en cours...</td></tr></tbody></table></div></div>
+      <div class="panel"><div class="panel-hdr"><span class="panel-title" style="color:#f59e0b">Secteurs Momentum</span></div><div class="panel-body"><div id="intel-sectors" style="padding:8px"><span style="color:var(--fg2)">Chargement...</span></div></div></div>
+    </div>
     <div class="panel" style="margin-bottom:16px"><div class="panel-hdr"><span class="panel-title" style="color:#06b6d4">CORTEX — Cerveau ML</span><span class="cortex-dot"></span><span style="font-size:10px;color:var(--fg2);margin-left:auto" id="cortex-count">0 logs</span></div><div class="cortex-terminal" id="cortex-terminal"><div style="padding:20px;color:var(--fg2)">Connexion au cerveau CORTEX...</div></div></div>
     <div id="ml-cards"></div>
   </div>
@@ -521,12 +525,37 @@ async function loadCortex(){
   el.scrollTop=el.scrollHeight;}catch(e){}
 }
 
+// === MARKET INTEL ===
+async function loadIntel(){
+  try{
+    const r=await fetch(`${API_BASE}/api/intel`);const data=await r.json();
+    document.getElementById('intel-scan-time').textContent=data.last_scan?`Scan: ${data.last_scan} UTC · ${data.total_scanned||0} actifs`:'—';
+    const movers=data.top_movers||[];
+    const tbody=document.getElementById('intel-tbody');
+    if(movers.length){
+      tbody.innerHTML=movers.map(m=>{
+        const mc=m.momentum>0?'var(--green)':'var(--red)';
+        const tc=m.trend>0?'var(--green)':'var(--red)';
+        return`<tr style="border-bottom:1px solid var(--rule)"><td style="padding:3px 6px;font-weight:600">${m.nom}<span style="color:var(--fg2);font-size:9px;margin-left:4px">${m.sym}</span></td><td style="text-align:right;padding:3px 6px;color:${m.chg_1h>0?'var(--green)':'var(--red)'}">${m.chg_1h>0?'+':''}${m.chg_1h}%</td><td style="text-align:right;padding:3px 6px;color:${m.chg_4h>0?'var(--green)':'var(--red)'}">${m.chg_4h>0?'+':''}${m.chg_4h}%</td><td style="text-align:right;padding:3px 6px;color:${m.chg_24h>0?'var(--green)':'var(--red)'}">${m.chg_24h>0?'+':''}${m.chg_24h}%</td><td style="text-align:right;padding:3px 6px;color:${m.vol_ratio>1.5?'var(--gold)':'var(--fg2)'}">${m.vol_ratio}x</td><td style="text-align:right;padding:3px 6px;color:${m.rsi>70?'var(--red)':m.rsi<30?'var(--green)':'var(--fg2)'}">${m.rsi}</td><td style="text-align:right;padding:3px 6px;font-weight:700;color:${mc}">${m.momentum>0?'+':''}${m.momentum}</td></tr>`;
+      }).join('');
+    }
+    const sectors=data.sector_momentum||{};
+    const sEl=document.getElementById('intel-sectors');
+    sEl.innerHTML=Object.entries(sectors).map(([k,v])=>{
+      const c=v>0?'var(--green)':v<0?'var(--red)':'var(--fg2)';
+      const bar=Math.min(Math.abs(v)*5,100);
+      return`<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="width:80px;text-transform:capitalize;font-size:11px">${k}</span><div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden"><div style="width:${bar}%;height:100%;background:${c};border-radius:3px"></div></div><span style="width:50px;text-align:right;font-size:11px;font-weight:700;color:${c}">${v>0?'+':''}${v}</span></div>`;
+    }).join('');
+  }catch(e){}
+}
+
 // === ML TAB ===
 async function loadML(){
   try{
+  loadIntel();
   const[rml,rstats,rterm]=await Promise.all([fetch(`${API_BASE}/api/ml`),fetch(`${API_BASE}/api/stats`),fetch(`${API_BASE}/api/terminal`)]);
   const d=await rml.json();const stats=await rstats.json();const term=await rterm.json();
-  document.getElementById('ml-info-row').innerHTML=[kpiHTML('Moteur CORTEX',d.modele||'Multi-Classifier',`${d.nb_features||27} features`),kpiHTML('Walk-Forward',`${d.taille_train||252}j`,`Refit: ${d.pas_reentrain||21}j`),kpiHTML('Classifieurs','4','RF+LightGBM+XGB+GBM'),kpiHTML('Mise a jour',d.timestamp||'—','')].join('');
+  document.getElementById('ml-info-row').innerHTML=[kpiHTML('Moteur CORTEX',d.modele||'Deep Ensemble',`${d.nb_features||31} features`),kpiHTML('Walk-Forward',`${d.taille_train||252}j`,`Refit: ${d.pas_reentrain||21}j`),kpiHTML('Classifieurs','6','LSTM+GRU+RF+LGB+XGB+GBM'),kpiHTML('Mise a jour',d.timestamp||'—','')].join('');
   const wr=stats.win_rate||0;const pf=stats.gain_total&&stats.perte_totale?Math.abs(stats.gain_total/Math.max(0.01,stats.perte_totale)):0;
   const avgWin=stats.trades_gagnants>0?(stats.gain_total/stats.trades_gagnants):0;
   const avgLoss=stats.trades_perdants>0?(stats.perte_totale/stats.trades_perdants):0;
@@ -565,8 +594,40 @@ async function loadML(){
   document.getElementById('ml-cards').innerHTML=cards||'<div style="color:var(--fg2);padding:20px">En attente de donnees ML...</div>';}catch(e){console.error('loadML error:',e);}
 }
 
+// === AUTO-TRADE DISPLAY ===
+let lastTradeCount=0;
+function autoShowNewTrades(){
+  const trades=etatGlobal.trades||[];
+  if(trades.length<=lastTradeCount){lastTradeCount=trades.length;return;}
+  const newTrades=trades.slice(lastTradeCount);
+  lastTradeCount=trades.length;
+  if(activeTab!=='charts')return;
+  for(const t of newTrades){
+    const sym=t.sym;if(!sym)continue;
+    const already=panels.findIndex(p=>p.sym===sym);
+    if(already>=0)continue;
+    let oldest=0;
+    for(let i=1;i<panels.length;i++){
+      const pi=panels[i],po=panels[oldest];
+      const ti=trades.filter(x=>x.sym===pi.sym);
+      const to_=trades.filter(x=>x.sym===po.sym);
+      const lastTi=ti.length?ti[ti.length-1]:null;
+      const lastTo=to_.length?to_[to_.length-1]:null;
+      if(!lastTi||(lastTo&&lastTi.date<lastTo.date))oldest=i;
+    }
+    const info=ALL_SYMS.find(a=>a.s===sym);
+    if(info){
+      panels[oldest].sym=sym;panels[oldest].name=info.n;panels[oldest].offset=0;
+      const sel=document.querySelectorAll('.sym-select')[oldest];
+      if(sel)sel.value=sym;
+      loadCandles(oldest);
+      saveState();
+    }
+  }
+}
+
 // === INIT ===
-function refreshAll(){panels.forEach((p,i)=>loadCandles(i));loadState();}
+function refreshAll(){panels.forEach((p,i)=>loadCandles(i));loadState().then(()=>autoShowNewTrades());}
 function updateTime(){document.getElementById('bottom-time').textContent=new Date().toLocaleString('fr-FR');}
 const saved=loadSavedState();
 if(saved){
@@ -574,7 +635,7 @@ if(saved){
   if(saved.indicator){activeIndicator=saved.indicator;document.getElementById('indicator-select').value=saved.indicator;}
   if(saved.tab&&saved.tab!=='charts'){const te=document.querySelector(`.tab[data-tab="${saved.tab}"]`);if(te)te.click();}
 }else{buildCharts();}
-loadState();updateTime();
+loadState().then(()=>{lastTradeCount=(etatGlobal.trades||[]).length;});updateTime();
 setInterval(refreshAll,30000);setInterval(updateTime,1000);
 window.addEventListener('resize',()=>{if(activeTab==='charts')panels.forEach((p,i)=>drawChart(i));});
 </script>
