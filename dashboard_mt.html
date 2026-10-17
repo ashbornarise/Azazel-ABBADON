@@ -9,12 +9,12 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Archivo:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0a0a0f;--bg2:#10101a;--bg3:#161625;--panel:#1a1a2e;
-  --fg:#d4d4e8;--fg2:#6b6b8d;--fg3:#44446b;
-  --gold:#c9a227;--gold-dim:rgba(201,162,39,.12);
+  --bg:#0a0a0f;--bg2:#12121e;--bg3:#1a1a2e;--panel:#1e1e32;
+  --fg:#e8e8f0;--fg2:#9090b0;--fg3:#606088;
+  --gold:#ddb530;--gold-dim:rgba(221,181,48,.15);
   --green:#00e676;--red:#ff1744;--blue:#448aff;--cyan:#26c6da;
-  --bull:#00c853;--bear:#ff1744;
-  --rule:#252540;--font:'IBM Plex Mono',monospace;--display:'Archivo',sans-serif;
+  --bull:#00e676;--bear:#ff4466;
+  --rule:#2a2a48;--font:'IBM Plex Mono',monospace;--display:'Archivo',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:12px;height:100vh;overflow:hidden;display:flex;flex-direction:column;-webkit-text-size-adjust:100%}
@@ -188,7 +188,21 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
   table{min-width:500px}
   .grid-2{grid-template-columns:1fr}
   .ml-grid-3{grid-template-columns:1fr}
-  .bottombar{font-size:8px;padding:3px 8px;position:sticky;bottom:0;z-index:50}
+  .bottombar{font-size:9px;padding:4px 8px;position:sticky;bottom:0;z-index:50}
+  body{font-size:13px}
+  .sp-label{font-size:10px!important}
+  .sp-pos-row{font-size:12px}
+  .sp-trade-row{font-size:11px}
+  .kpi-label{font-size:11px!important}
+  .kpi-val{font-size:18px}
+  .kpi-sub{font-size:11px!important}
+  .panel-title{font-size:13px}
+  th{font-size:11px}
+  td{font-size:12px}
+  .chart-header .price{font-size:13px!important}
+  .chart-header .change{font-size:10px!important}
+  .cortex-line{font-size:11px}
+  .chart-overlay .ohlc{font-size:11px}
 }
 </style>
 </head>
