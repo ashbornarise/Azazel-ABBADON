@@ -172,6 +172,16 @@ hyperopt_cache = {}
 hyperopt_derniere_run = {}
 HYPEROPT_INTERVAL = 3600
 
+cortex_logs = []
+MAX_CORTEX_LOGS = 200
+
+def cortex_log(level, module, message):
+    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    entry = {"ts": ts, "level": level, "module": module, "msg": message}
+    cortex_logs.append(entry)
+    if len(cortex_logs) > MAX_CORTEX_LOGS:
+        del cortex_logs[:len(cortex_logs) - MAX_CORTEX_LOGS]
+
 ohlcv_cache = {}
 lock = threading.Lock()
 
@@ -299,6 +309,7 @@ def executer_stop_loss(sym, nom, prix):
     })
     protections.apres_trade(sym, pnl)
     protections.stop_technique.fermer_position(sym)
+    cortex_log("STOP", "RISK", f"{nom} ({sym}): STOP-LOSS @ {prix:.2f} | PnL: {pnl:+.2f}$ | {raison}")
     print(f"  [STOP-LOSS] {nom}: VENTE FORCEE a {prix:.2f} | PnL: {pnl:+.2f}$ | {raison}")
 
 
@@ -403,6 +414,7 @@ def analyser_ml_details(sym, nom, hist_df, expo, decision):
                     hyperopt_derniere_run[sym] = now_ts
                     clf_custom = construire_classifieurs_optimises(h_results, seed=42)
                     best_h = min(h_results.values(), key=lambda r: r.log_loss_val)
+                    cortex_log("OPT", "HYPEROPT", f"{nom}: Best={best_h.nom} LL={best_h.log_loss_val} Acc={best_h.accuracy_val}%")
                     print(f"  [HYPEROPT] {nom}: meilleur={best_h.nom} LogLoss={best_h.log_loss_val} Acc={best_h.accuracy_val}%")
                     ml_etat.setdefault("hyperopt", {})[sym] = {
                         r.nom: {"params": r.meilleurs_params, "log_loss": r.log_loss_val, "accuracy": r.accuracy_val}
@@ -493,6 +505,7 @@ def analyser_et_trader():
     etat["derniere_analyse"] = now.strftime("%Y-%m-%d %H:%M")
     etat["prochaine_analyse"] = (now + timedelta(seconds=TRADE_INTERVAL)).strftime("%Y-%m-%d %H:%M")
 
+    cortex_log("INFO", "CORTEX", f"Cycle d'analyse demarre | Cash: {etat['cash']:.2f}$ | Capital: {etat['capital']:.2f}$")
     print(f"\n{'='*50}")
     print(f"[TRADE] Analyse a {now.strftime('%H:%M:%S')} UTC")
     print(f"  Cash: {etat['cash']:.2f}$ | Capital: {etat['capital']:.2f}$")
@@ -572,6 +585,10 @@ def analyser_et_trader():
                         "quantite": qte,
                         "montant_entree": round(montant, 2),
                         "date": now.strftime("%Y-%m-%d %H:%M"),
+                        "stop_loss": round(prix_actuel * 0.95, 4),
+                        "take_profit": round(prix_actuel * 1.08, 4),
+                        "trailing_active": False,
+                        "pic_prix": prix_actuel,
                     }
                     etat["cash"] -= montant
                     etat["nb_trades"] += 1
@@ -585,6 +602,7 @@ def analyser_et_trader():
                         "capital": round(etat["cash"], 2),
                     })
                     protections.apres_trade(sym, 0.0)
+                    cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% >= {seuil_a}% | SL={prix_actuel*0.95:.2f} TP={prix_actuel*1.08:.2f}")
                     print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% >= seuil {seuil_a}%) [SL a {prix_actuel * 0.95:.2f}]")
                 else:
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
@@ -617,9 +635,11 @@ def analyser_et_trader():
                     "capital": round(etat["cash"], 2),
                 })
                 protections.apres_trade(sym, pnl)
+                cortex_log("SELL", "TRADE", f"{nom} ({sym}): VENTE {valeur:.2f}$ | PnL: {pnl:+.2f}$ | Proba {proba_pct:.0f}% <= {seuil_v}%")
                 print(f"  {nom}: VENTE {valeur:.2f}$ (PnL: {pnl:+.2f}$)")
 
             else:
+                cortex_log("HOLD", "ANALYSE", f"{nom}: {decision} @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% (A>{seuil_a}% V<{seuil_v}%)")
                 print(f"  {nom}: {decision} | {prix_actuel:.2f} | proba {proba_pct:.0f}% (seuils: A>{seuil_a}% V<{seuil_v}%)")
 
         except Exception as e:
@@ -692,6 +712,47 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             interval = params.get("interval", ["5m"])[0]
             candles = fetch_ohlcv(sym, period, interval)
             self._json_response({"sym": sym, "candles": candles})
+            return
+
+        if path == "/api/terminal":
+            self._json_response({"logs": list(cortex_logs)})
+            return
+
+        if path == "/api/stats":
+            with lock:
+                positions = etat.get("positions", {})
+                actives = {s: p for s, p in positions.items() if p.get("en_position")}
+                stats = {
+                    "capital": etat.get("capital", CAPITAL_INIT),
+                    "cash": etat.get("cash", CAPITAL_INIT),
+                    "pnl": etat.get("pnl", 0),
+                    "pnl_pct": etat.get("pnl_pct", 0),
+                    "drawdown": etat.get("drawdown", 0),
+                    "nb_trades": etat.get("nb_trades", 0),
+                    "trades_gagnants": etat.get("trades_gagnants", 0),
+                    "trades_perdants": etat.get("trades_perdants", 0),
+                    "gain_total": etat.get("gain_total", 0),
+                    "perte_totale": etat.get("perte_totale", 0),
+                    "win_rate": round(etat["trades_gagnants"] / max(1, etat["nb_trades"]) * 100, 1),
+                    "positions_actives": len(actives),
+                    "equity": etat.get("equity", []),
+                    "timestamps_equity": etat.get("timestamps_equity", []),
+                    "signaux": etat.get("signaux", {}),
+                    "positions": positions,
+                    "secteurs": {},
+                }
+                crypto = forex = actions = indices = 0
+                for sym in actives:
+                    if sym.endswith("-USD") or sym.endswith("-EUR"):
+                        crypto += 1
+                    elif "=" in sym:
+                        forex += 1
+                    elif sym.startswith("^"):
+                        indices += 1
+                    else:
+                        actions += 1
+                stats["secteurs"] = {"Crypto": crypto, "Forex": forex, "Actions": actions, "Indices": indices}
+            self._json_response(stats)
             return
 
         if path == "/api/history":
