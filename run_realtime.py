@@ -37,7 +37,15 @@ ML_PATH = Path("data/etat_ml.json")
 HISTORY_PATH = Path("data/trade_history.json")
 PORT = int(os.environ.get("PORT", 8777))
 CAPITAL_INIT = 100.0
-TRADE_INTERVAL = 300  # 5 minutes
+TRADE_INTERVAL = 120  # 2 minutes — frequence augmentee pour capter plus de mouvements
+
+MARCHES_PRIORITAIRES = {
+    "BTC-USD": 1.5, "ETH-USD": 1.2, "SOL-USD": 1.2, "BNB-USD": 1.1,
+    "NVDA": 1.3, "TSLA": 1.2, "AAPL": 1.1, "MSFT": 1.1,
+    "GC=F": 1.3, "CL=F": 1.1,
+}
+BASE_ALLOC = 0.15
+MAX_ALLOC = 0.30
 
 ACTIFS = {
     # === CRYPTO (30) ===
@@ -278,6 +286,76 @@ def calculer_valeur_totale():
         etat["drawdown"] = round((total - etat["plus_haut"]) / etat["plus_haut"] * 100, 2)
 
 
+def verifier_tp_trailing(sym, nom, prix):
+    pos = etat["positions"].get(sym, {})
+    if not pos.get("en_position"):
+        return
+    tp = pos.get("take_profit")
+    sl = pos.get("stop_loss")
+    entry = pos.get("prix_entree", 0)
+    if not entry:
+        return
+    pnl_pct = (prix - entry) / entry * 100
+    if pos.get("pic_prix"):
+        pos["pic_prix"] = max(pos["pic_prix"], prix)
+    else:
+        pos["pic_prix"] = prix
+    if pnl_pct >= 2.0 and not pos.get("trailing_active"):
+        pos["trailing_active"] = True
+        pos["stop_loss"] = round(entry * 1.005, 4)
+        cortex_log("ML", "TRAILING", f"{nom}: Trailing actif, SL releve a breakeven+0.5% ({pos['stop_loss']:.2f})")
+    if pos.get("trailing_active") and pos["pic_prix"] > 0:
+        trail_sl = round(pos["pic_prix"] * 0.97, 4)
+        if trail_sl > pos.get("stop_loss", 0):
+            pos["stop_loss"] = trail_sl
+    if tp and prix >= tp:
+        now = datetime.now(timezone.utc)
+        valeur = pos["quantite"] * prix
+        pnl = valeur - pos["montant_entree"]
+        etat["cash"] += valeur
+        etat["trades_gagnants"] += 1
+        etat["gain_total"] += pnl
+        etat["positions"][sym] = {"en_position": False}
+        etat["trades"].append({
+            "date": now.strftime("%m-%d %H:%M"),
+            "sym": sym, "nom": nom,
+            "action": "TAKE-PROFIT",
+            "prix": round(prix, 2),
+            "montant": round(valeur, 2),
+            "pnl": round(pnl, 2),
+            "capital": round(etat["cash"], 2),
+        })
+        protections.apres_trade(sym, pnl)
+        cortex_log("BUY", "RISK", f"{nom} ({sym}): TAKE-PROFIT @ {prix:.2f} | PnL: +{pnl:.2f}$ | +{pnl_pct:.1f}%")
+        print(f"  [TAKE-PROFIT] {nom}: +{pnl:.2f}$ a {prix:.2f}")
+    if sl and prix <= sl and not (tp and prix >= tp):
+        now = datetime.now(timezone.utc)
+        valeur = pos["quantite"] * prix
+        pnl = valeur - pos["montant_entree"]
+        etat["cash"] += valeur
+        if pnl >= 0:
+            etat["trades_gagnants"] += 1
+            etat["gain_total"] += pnl
+        else:
+            etat["trades_perdants"] += 1
+            etat["perte_totale"] += abs(pnl)
+        raison = "Trailing SL" if pos.get("trailing_active") else "Stop-Loss -5%"
+        etat["positions"][sym] = {"en_position": False}
+        etat["trades"].append({
+            "date": now.strftime("%m-%d %H:%M"),
+            "sym": sym, "nom": nom,
+            "action": "STOP-LOSS",
+            "prix": round(prix, 2),
+            "montant": round(valeur, 2),
+            "pnl": round(pnl, 2),
+            "capital": round(etat["cash"], 2),
+            "raison": raison,
+        })
+        protections.apres_trade(sym, pnl)
+        cortex_log("STOP", "RISK", f"{nom} ({sym}): {raison} @ {prix:.2f} | PnL: {pnl:+.2f}$")
+        print(f"  [{raison.upper()}] {nom}: {pnl:+.2f}$ a {prix:.2f}")
+
+
 def executer_stop_loss(sym, nom, prix):
     pos = etat["positions"].get(sym, {})
     if not pos.get("en_position"):
@@ -347,6 +425,7 @@ def fetch_prix():
                 etat["prix_historique"][sym] = etat["prix_historique"][sym][-300:]
 
             executer_stop_loss(sym, nom, prix)
+            verifier_tp_trailing(sym, nom, prix)
 
     with lock:
         calculer_valeur_totale()
@@ -576,7 +655,9 @@ def analyser_et_trader():
             pos = etat["positions"].get(sym, {})
 
             if decision == "ACHAT" and not pos.get("en_position"):
-                montant = etat["cash"] * 0.20
+                boost = MARCHES_PRIORITAIRES.get(sym, 1.0)
+                alloc = min(BASE_ALLOC * boost, MAX_ALLOC)
+                montant = etat["cash"] * alloc
                 if montant >= 1:
                     qte = montant / prix_actuel
                     etat["positions"][sym] = {
