@@ -2,8 +2,10 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>Rex Clemens · Terminal</title>
+<link rel="icon" type="image/png" href="logo-rex.png">
+<link rel="apple-touch-icon" href="logo-rex.png">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Archivo:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -15,7 +17,7 @@
   --rule:#252540;--font:'IBM Plex Mono',monospace;--display:'Archivo',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:12px;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:12px;height:100vh;overflow:hidden;display:flex;flex-direction:column;-webkit-text-size-adjust:100%}
 .topbar{display:flex;align-items:center;padding:6px 12px;background:var(--bg2);border-bottom:1px solid var(--rule);flex-shrink:0;gap:4px;flex-wrap:wrap}
 .topbar .brand{display:flex;align-items:center;gap:8px;margin-right:12px}
 .topbar .logo{width:36px;height:36px;border-radius:4px;object-fit:contain}
@@ -154,13 +156,39 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
   .bottombar{font-size:8px;padding:3px 8px}
 }
 @media(max-width:600px){
-  .topbar .controls{display:none}
+  body{overflow-y:auto;overflow-x:hidden;height:auto;min-height:100vh}
+  .topbar{flex-wrap:wrap;gap:4px;padding:6px 8px;position:sticky;top:0;z-index:100}
+  .topbar .brand{width:auto;flex-shrink:0}
+  .topbar .logo{width:24px;height:24px}
+  .topbar .title{font-size:10px}
+  .topbar .tabs{order:3;width:100%;gap:2px;justify-content:space-between}
+  .topbar .tab{padding:5px 0;font-size:9px;flex:1;text-align:center}
+  .topbar .controls{display:flex;order:2;gap:4px}
+  .topbar .controls select,.topbar .controls button{font-size:9px;padding:3px 6px}
   .topbar .status{display:none}
-  .chart-header .tf-btns{gap:1px}
-  .chart-header .tf-btn{padding:1px 3px;font-size:8px}
-  .grid-2x3,.grid-2x2,.grid-3x3{grid-template-columns:1fr;grid-template-rows:repeat(auto-fill,minmax(200px,1fr))}
-  .side-panel{max-height:140px}
+  .tab-content.active{display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+  .charts-layout{flex-direction:column;overflow-y:auto;overflow-x:hidden;height:auto;min-height:0}
+  .chart-grid{display:flex!important;flex-direction:column;gap:1px;overflow:visible;height:auto}
+  .grid-2x3,.grid-2x2,.grid-3x3,.grid-1x1{grid-template-columns:1fr}
+  .chart-panel{min-height:280px;height:280px;flex-shrink:0}
+  .chart-header{flex-wrap:nowrap;padding:4px 6px}
+  .chart-header select{max-width:100px;font-size:9px}
+  .chart-header .price{font-size:11px}
+  .chart-header .change{font-size:9px}
+  .chart-header .tf-btns{gap:1px;flex-shrink:0}
+  .chart-header .tf-btn{padding:2px 4px;font-size:8px}
+  .side-panel{width:100%;max-height:none;height:auto;flex-direction:column;border-left:none;border-top:1px solid var(--rule);order:2;flex-shrink:0;overflow:visible}
+  .side-panel .sp-section{padding:6px 10px}
+  .side-panel .sp-value{font-size:14px}
+  .sp-positions{max-height:120px;overflow-y:auto}
+  .sp-trades{max-height:100px;overflow-y:auto}
+  .scroll-tab{padding:8px;overflow-y:auto;overflow-x:hidden;height:auto}
   .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .panel-body{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{min-width:500px}
+  .grid-2{grid-template-columns:1fr}
+  .ml-grid-3{grid-template-columns:1fr}
+  .bottombar{font-size:8px;padding:3px 8px;position:sticky;bottom:0;z-index:50}
 }
 </style>
 </head>
@@ -435,9 +463,11 @@ function calcRSI(data,period=14){const r=[];let g=0,l=0;for(let i=0;i<data.lengt
 
 // === LAYOUT ===
 function changeLayout(layout){
-  document.getElementById('chart-grid').className='chart-grid grid-'+layout;
+  const mob=window.innerWidth<=600;
+  if(!mob)document.getElementById('chart-grid').className='chart-grid grid-'+layout;
   const map={'2x2':{cols:2,rows:2,total:4},'2x3':{cols:3,rows:2,total:6},'3x3':{cols:3,rows:3,total:9},'1x1':{cols:1,rows:1,total:1}};
-  gridSize=map[layout]||map['2x3'];buildCharts();saveState();
+  if(mob){gridSize={cols:1,rows:6,total:6};}else{gridSize=map[layout]||map['2x3'];}
+  buildCharts();saveState();
 }
 function buildCharts(){
   const grid=document.getElementById('chart-grid');grid.innerHTML='';
@@ -843,9 +873,14 @@ function refreshState(){loadState().then(()=>autoShowNewTrades());}
 function refreshCharts(){panels.forEach((p,i)=>loadCandles(i));}
 function refreshAll(){refreshCharts();refreshState();}
 function updateTime(){document.getElementById('bottom-time').textContent=new Date().toLocaleString('fr-FR');}
+const isMobile=window.innerWidth<=600;
+if(isMobile){
+  gridSize={cols:1,rows:6,total:6};
+  document.getElementById('chart-grid').className='chart-grid';
+}
 const saved=loadSavedState();
 if(saved){
-  if(saved.layout){document.getElementById('grid-layout').value=saved.layout;changeLayout(saved.layout);}else buildCharts();
+  if(!isMobile&&saved.layout){document.getElementById('grid-layout').value=saved.layout;changeLayout(saved.layout);}else buildCharts();
   if(saved.indicator){activeIndicator=saved.indicator;document.getElementById('indicator-select').value=saved.indicator;}
   if(saved.tab&&saved.tab!=='charts'){const te=document.querySelector(`.tab[data-tab="${saved.tab}"]`);if(te)te.click();}
 }else{buildCharts();}
