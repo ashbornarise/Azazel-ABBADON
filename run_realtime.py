@@ -39,10 +39,35 @@ CAPITAL_INIT = 100.0
 TRADE_INTERVAL = 300  # 5 minutes
 
 ACTIFS = {
+    # Crypto majeurs
     "BTC-USD": "Bitcoin",
     "ETH-USD": "Ethereum",
-    "MSFT": "Microsoft",
     "SOL-USD": "Solana",
+    "BNB-USD": "BNB",
+    "XRP-USD": "XRP",
+    "ADA-USD": "Cardano",
+    "AVAX-USD": "Avalanche",
+    "DOGE-USD": "Dogecoin",
+    "DOT-USD": "Polkadot",
+    "LINK-USD": "Chainlink",
+    "MATIC-USD": "Polygon",
+    "ATOM-USD": "Cosmos",
+    "UNI-USD": "Uniswap",
+    "LTC-USD": "Litecoin",
+    # Actions US tech
+    "MSFT": "Microsoft",
+    "AAPL": "Apple",
+    "NVDA": "Nvidia",
+    "TSLA": "Tesla",
+    "AMZN": "Amazon",
+    "META": "Meta",
+    "GOOGL": "Google",
+    "AMD": "AMD",
+    "NFLX": "Netflix",
+    "COIN": "Coinbase",
+    # Commodities
+    "GC=F": "Gold",
+    "SI=F": "Silver",
 }
 
 
@@ -630,6 +655,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "page": page,
                 "pages": (total + per_page - 1) // per_page if total > 0 else 1,
             })
+            return
+
+        if path == "/mt" or path == "/terminal":
+            self.path = "/dashboard_mt.html"
+            super().do_GET()
             return
 
         if path == "/ml":
