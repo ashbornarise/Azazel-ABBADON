@@ -215,6 +215,9 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
 </div>
 
 <script>
+// API base: vide = meme serveur, sinon URL Railway (ex: https://rex-clemens.up.railway.app)
+const API_BASE = window.REX_API_BASE || '';
+
 // === State ===
 let showMA = true, showVol = true;
 let chartCandles = [];
@@ -253,7 +256,7 @@ async function loadChart() {
   const interval = document.getElementById('chart-interval').value;
   const period = document.getElementById('chart-period').value;
   try {
-    const r = await fetch(`/api/ohlcv?sym=${sym}&interval=${interval}&period=${period}`);
+    const r = await fetch(`${API_BASE}/api/ohlcv?sym=${sym}&interval=${interval}&period=${period}`);
     const d = await r.json();
     chartCandles = d.candles || [];
     chartOffset = Math.max(0, chartCandles.length - Math.floor(cc.width / (candleW + 2)));
@@ -513,7 +516,7 @@ function drawEquity(equity, timestamps) {
 // === Load Data ===
 async function loadState() {
   try {
-    const r = await fetch('/api/etat');
+    const r = await fetch(`${API_BASE}/api/etat`);
     const d = await r.json();
 
     // Header badges
@@ -606,7 +609,7 @@ let histPage = 1;
 async function loadHistory(page) {
   histPage = page || 1;
   const sym = document.getElementById('hist-filter').value;
-  const url = `/api/history?page=${histPage}&per_page=50${sym ? '&sym=' + sym : ''}`;
+  const url = `${API_BASE}/api/history?page=${histPage}&per_page=50${sym ? '&sym=' + sym : ''}`;
   try {
     const r = await fetch(url);
     const d = await r.json();
@@ -645,7 +648,7 @@ document.getElementById('hist-filter').addEventListener('change', () => loadHist
 // === ML ===
 async function loadML() {
   try {
-    const r = await fetch('/api/ml');
+    const r = await fetch(`${API_BASE}/api/ml`);
     const d = await r.json();
 
     const prot = d.protections || {};

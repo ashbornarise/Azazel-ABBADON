@@ -12,6 +12,7 @@ Dashboard : http://localhost:8777
 
 import http.server
 import json
+import os
 import threading
 import time
 import urllib.parse
@@ -33,7 +34,7 @@ from sklearn.metrics import accuracy_score
 ETAT_PATH = Path("data/etat_realtime.json")
 ML_PATH = Path("data/etat_ml.json")
 HISTORY_PATH = Path("data/trade_history.json")
-PORT = 8777
+PORT = int(os.environ.get("PORT", 8777))
 CAPITAL_INIT = 100.0
 TRADE_INTERVAL = 300  # 5 minutes
 
