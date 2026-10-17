@@ -111,6 +111,9 @@ ml_etat = {
         "stoploss_guard": "3 pertes consecutives",
         "cooldown": "300s par actif",
         "fee_filter": "gain > 2x frais",
+        "stop_fixe": "-5% par trade",
+        "trailing_stop": "-3% depuis pic (active a +2%)",
+        "take_profit": "+8% par trade",
     },
     "seuils_dynamiques": {},
     "benchmark_classifieurs": {},
@@ -204,6 +207,40 @@ def calculer_valeur_totale():
         etat["drawdown"] = round((total - etat["plus_haut"]) / etat["plus_haut"] * 100, 2)
 
 
+def executer_stop_loss(sym, nom, prix):
+    pos = etat["positions"].get(sym, {})
+    if not pos.get("en_position"):
+        return
+    protections.stop_technique.mettre_a_jour_prix(sym, prix)
+    stop, raison = protections.stop_technique.verifier_stop(sym, prix)
+    if not stop:
+        return
+    now = datetime.now(timezone.utc)
+    valeur = pos["quantite"] * prix
+    pnl = valeur - pos["montant_entree"]
+    etat["cash"] += valeur
+    if pnl >= 0:
+        etat["trades_gagnants"] += 1
+        etat["gain_total"] += pnl
+    else:
+        etat["trades_perdants"] += 1
+        etat["perte_totale"] += abs(pnl)
+    etat["positions"][sym] = {"en_position": False}
+    etat["trades"].append({
+        "date": now.strftime("%m-%d %H:%M"),
+        "sym": sym, "nom": nom,
+        "action": "STOP-LOSS",
+        "prix": round(prix, 2),
+        "montant": round(valeur, 2),
+        "pnl": round(pnl, 2),
+        "capital": round(etat["cash"], 2),
+        "raison": raison,
+    })
+    protections.apres_trade(sym, pnl)
+    protections.stop_technique.fermer_position(sym)
+    print(f"  [STOP-LOSS] {nom}: VENTE FORCEE a {prix:.2f} | PnL: {pnl:+.2f}$ | {raison}")
+
+
 def fetch_prix():
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     for sym, nom in ACTIFS.items():
@@ -225,6 +262,8 @@ def fetch_prix():
             etat["prix_historique"][sym].append([now, round(prix, 2)])
             if len(etat["prix_historique"][sym]) > 300:
                 etat["prix_historique"][sym] = etat["prix_historique"][sym][-300:]
+
+            executer_stop_loss(sym, nom, prix)
         except Exception as e:
             print(f"  [PRIX] {sym}: {e}")
 
@@ -454,6 +493,7 @@ def analyser_et_trader():
                     }
                     etat["cash"] -= montant
                     etat["nb_trades"] += 1
+                    protections.stop_technique.ouvrir_position(sym, prix_actuel)
                     etat["trades"].append({
                         "date": now.strftime("%m-%d %H:%M"),
                         "sym": sym, "nom": nom,
@@ -463,7 +503,7 @@ def analyser_et_trader():
                         "capital": round(etat["cash"], 2),
                     })
                     protections.apres_trade(sym, 0.0)
-                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% >= seuil {seuil_a}%)")
+                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% >= seuil {seuil_a}%) [SL a {prix_actuel * 0.95:.2f}]")
                 else:
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
 
@@ -484,6 +524,7 @@ def analyser_et_trader():
                     etat["trades_perdants"] += 1
                     etat["perte_totale"] += abs(pnl)
                 etat["positions"][sym] = {"en_position": False}
+                protections.stop_technique.fermer_position(sym)
                 etat["trades"].append({
                     "date": now.strftime("%m-%d %H:%M"),
                     "sym": sym, "nom": nom,

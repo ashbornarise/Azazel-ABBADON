@@ -11,6 +11,7 @@ from src.ml.protections import (
     StoplossGuard,
     CooldownProtection,
     FeeFilter,
+    TechnicalStopLoss,
 )
 from src.ml.multi_classifier import (
     construire_classifieurs,
@@ -234,3 +235,56 @@ class TestHyperopt:
         assert len(tous) >= 2
         clf_opt = construire_classifieurs_optimises(tous)
         assert "RandomForest" in clf_opt
+
+
+class TestTechnicalStopLoss:
+    def test_stop_fixe_declenche(self):
+        sl = TechnicalStopLoss(stop_fixe_pct=-5.0, take_profit_pct=20.0)
+        sl.ouvrir_position("BTC", 100.0)
+        stop, _ = sl.verifier_stop("BTC", 96.0)
+        assert stop is False
+        stop, _ = sl.verifier_stop("BTC", 95.01)
+        assert stop is False
+        stop, raison = sl.verifier_stop("BTC", 94.99)
+        assert stop is True
+        assert "StopLoss fixe" in raison
+
+    def test_trailing_stop_declenche(self):
+        sl = TechnicalStopLoss(stop_fixe_pct=-10.0, trailing_pct=-3.0, trailing_activation_pct=2.0)
+        sl.ouvrir_position("ETH", 100.0)
+        sl.mettre_a_jour_prix("ETH", 103.0)
+        stop, _ = sl.verifier_stop("ETH", 103.0)
+        assert stop is False
+        stop, raison = sl.verifier_stop("ETH", 99.9)
+        assert stop is True
+        assert "TrailingStop" in raison
+
+    def test_trailing_pas_actif_sous_seuil(self):
+        sl = TechnicalStopLoss(stop_fixe_pct=-10.0, trailing_pct=-3.0, trailing_activation_pct=2.0)
+        sl.ouvrir_position("SOL", 100.0)
+        sl.mettre_a_jour_prix("SOL", 101.5)
+        stop, _ = sl.verifier_stop("SOL", 98.5)
+        assert stop is False
+
+    def test_fermer_position(self):
+        sl = TechnicalStopLoss()
+        sl.ouvrir_position("BTC", 100.0)
+        sl.fermer_position("BTC")
+        stop, _ = sl.verifier_stop("BTC", 80.0)
+        assert stop is False
+
+    def test_take_profit_declenche(self):
+        sl = TechnicalStopLoss(stop_fixe_pct=-10.0, take_profit_pct=8.0)
+        sl.ouvrir_position("BTC", 100.0)
+        stop, _ = sl.verifier_stop("BTC", 107.0)
+        assert stop is False
+        stop, raison = sl.verifier_stop("BTC", 108.0)
+        assert stop is True
+        assert "TakeProfit" in raison
+
+    def test_gestionnaire_inclut_stop_technique(self):
+        g = GestionnaireProtections(stop_fixe_pct=-5.0, trailing_pct=-3.0)
+        assert g.stop_technique is not None
+        g.stop_technique.ouvrir_position("BTC", 100.0)
+        stop, raison = g.stop_technique.verifier_stop("BTC", 94.0)
+        assert stop is True
