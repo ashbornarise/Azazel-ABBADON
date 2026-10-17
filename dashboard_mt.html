@@ -524,12 +524,12 @@ async function loadState(){
   pe.className='sp-value '+(pnl>=0?'up':'down');
   document.getElementById('sp-capital').className='sp-value '+(pnl>=0?'up':'down');
   let pc=0,ph='';
-  if(etatGlobal.positions){for(const[sym,pos]of Object.entries(etatGlobal.positions)){if(!pos.en_position)continue;pc++;const prix=etatGlobal.prix?etatGlobal.prix[sym]:pos.prix_entree;const pp=prix?((prix-pos.prix_entree)/pos.prix_entree*100):0;ph+=`<div class="sp-pos-row"><span style="font-weight:600">${sym}</span><span>${pos.montant_entree}$</span><span style="font-weight:600;color:${pp>=0?'var(--bull)':'var(--bear)'}">${pp>=0?'+':''}${pp.toFixed(2)}%</span></div>`;}}
+  if(etatGlobal.positions){for(const[sym,pos]of Object.entries(etatGlobal.positions)){if(!pos.en_position)continue;pc++;const sig=etatGlobal.signaux?etatGlobal.signaux[sym]:null;const prix=sig?sig.prix:pos.prix_entree;const pp=prix&&pos.prix_entree?((prix-pos.prix_entree)/pos.prix_entree*100):0;ph+=`<div class="sp-pos-row"><span style="font-weight:600">${sym}</span><span>${pos.montant_entree}$</span><span style="font-weight:600;color:${pp>=0?'var(--bull)':'var(--bear)'}">${pp>=0?'+':''}${pp.toFixed(2)}%</span></div>`;}}
   document.getElementById('sp-positions').innerHTML=ph||'<div style="padding:10px;color:var(--fg2);font-size:11px">Aucune position</div>';
   document.getElementById('sp-pos-count').textContent=pc;
   const trades=(etatGlobal.trades||[]).slice(-10).reverse();
   document.getElementById('sp-trades').innerHTML=trades.map(t=>{const cls=t.action==='ACHAT'?'buy':t.action==='STOP-LOSS'?'sl':'sell';return`<div class="sp-trade-row"><span class="${cls}">${t.action}</span><span>${t.sym||''}</span><span>${t.montant||''}$</span></div>`;}).join('');
-  document.getElementById('status-text').textContent=`${etatGlobal.nb_actifs||0} actifs · ${etatGlobal.nb_trades||0} trades · ${etatGlobal.derniere_maj||'--'}`;
+  document.getElementById('status-text').textContent=`${etatGlobal.nb_actifs||0} actifs · ${(etatGlobal.trades||[]).length} trades · ${pc} positions · ${etatGlobal.derniere_maj||'--'}`;
   if(activeTab==='charts')panels.forEach((p,i)=>drawChart(i));
   }catch(e){document.getElementById('status-text').textContent='Erreur connexion';}
 }
@@ -735,7 +735,9 @@ function autoShowNewTrades(){
 }
 
 // === INIT ===
-function refreshAll(){panels.forEach((p,i)=>loadCandles(i));loadState().then(()=>autoShowNewTrades());}
+function refreshState(){loadState().then(()=>autoShowNewTrades());}
+function refreshCharts(){panels.forEach((p,i)=>loadCandles(i));}
+function refreshAll(){refreshCharts();refreshState();}
 function updateTime(){document.getElementById('bottom-time').textContent=new Date().toLocaleString('fr-FR');}
 const saved=loadSavedState();
 if(saved){
@@ -744,7 +746,7 @@ if(saved){
   if(saved.tab&&saved.tab!=='charts'){const te=document.querySelector(`.tab[data-tab="${saved.tab}"]`);if(te)te.click();}
 }else{buildCharts();}
 loadState().then(()=>{lastTradeCount=(etatGlobal.trades||[]).length;});updateTime();
-setInterval(refreshAll,30000);setInterval(updateTime,1000);
+setInterval(refreshState,15000);setInterval(refreshCharts,60000);setInterval(updateTime,1000);
 window.addEventListener('resize',()=>{if(activeTab==='charts')panels.forEach((p,i)=>drawChart(i));});
 </script>
 </body>
