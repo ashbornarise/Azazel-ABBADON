@@ -1,8 +1,10 @@
 """
-Rex Clemens Capital — Trading temps reel
-=========================================
-Le robot trade toutes les heures sur des donnees reelles.
-Les prix se rafraichissent toutes les 30 secondes.
+Rex Clemens Capital — Trading temps reel V2
+=============================================
+Multi-classifier ML (RF+LightGBM+XGBoost+GBM) avec 31 features + Optuna hyperopt.
+Protections: MaxDrawdown, StoplossGuard, CooldownPeriod, FeeFilter.
+Seuils dynamiques (mean +/- N*std) au lieu de seuils fixes.
+Trade toutes les 5 minutes, prix toutes les 30 secondes.
 
 Usage : python run_realtime.py
 Dashboard : http://localhost:8777
@@ -12,6 +14,7 @@ import http.server
 import json
 import threading
 import time
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,16 +22,20 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from src.ml.features import calculer_features
+from src.ml.features import calculer_features, calculer_features_v2
+from src.ml.protections import GestionnaireProtections
+from src.ml.multi_classifier import benchmark_classifieurs, seuil_dynamique
+from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
 from src.strategies.ml_strategy import MLStrategy
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
 ETAT_PATH = Path("data/etat_realtime.json")
 ML_PATH = Path("data/etat_ml.json")
+HISTORY_PATH = Path("data/trade_history.json")
 PORT = 8777
 CAPITAL_INIT = 100.0
+TRADE_INTERVAL = 300  # 5 minutes
 
 ACTIFS = {
     "BTC-USD": "Bitcoin",
@@ -80,9 +87,9 @@ etat = {
 ml_etat = {
     "actifs": {},
     "timestamp": "-",
-    "nb_features": 11,
-    "modele": "Random Forest",
-    "arbres": 50,
+    "nb_features": 31,
+    "modele": "Multi-Classifier (RF+LightGBM+XGBoost+GBM)",
+    "arbres": 100,
     "walk_forward": True,
     "taille_train": 252,
     "pas_reentrain": 21,
@@ -92,10 +99,81 @@ ml_etat = {
         "ma_ratio_5_20", "ma_ratio_20_60",
         "rsi_14", "dist_haut_20j",
         "amplitude_5j", "skew_20j",
+        "macd_hist", "stoch_k", "stoch_d",
+        "bb_position", "atr_14", "trend_strength",
+        "ret_60j", "volume_ratio", "volume_trend",
+        "kurt_20j", "pct_hausse_20j", "dist_bas_20j",
+        "adx_14", "bb_width", "jour_semaine", "heure",
+        "pattern_score", "engulfing", "macd_cross", "cci_20",
     ],
+    "protections": {
+        "max_drawdown": "-5%",
+        "stoploss_guard": "3 pertes consecutives",
+        "cooldown": "300s par actif",
+        "fee_filter": "gain > 2x frais",
+    },
+    "seuils_dynamiques": {},
+    "benchmark_classifieurs": {},
+    "hyperopt": {},
 }
 
+protections = GestionnaireProtections(
+    max_drawdown_pct=-5.0,
+    pertes_max_consecutives=3,
+    cooldown_seconds=300,
+    fee_pct=0.1,
+)
+
+probas_historiques = {}
+
+hyperopt_cache = {}
+hyperopt_derniere_run = {}
+HYPEROPT_INTERVAL = 3600
+
+ohlcv_cache = {}
 lock = threading.Lock()
+
+
+def charger_historique():
+    if HISTORY_PATH.exists():
+        with open(HISTORY_PATH) as f:
+            return json.load(f)
+    return []
+
+
+def sauver_historique(trades):
+    HISTORY_PATH.parent.mkdir(exist_ok=True)
+    with open(HISTORY_PATH, "w") as f:
+        json.dump(trades, f, cls=NumpyEncoder)
+
+
+def fetch_ohlcv(sym, period="5d", interval="5m"):
+    now = time.time()
+    key = f"{sym}_{period}_{interval}"
+    cached = ohlcv_cache.get(key)
+    if cached and now - cached["ts"] < 120:
+        return cached["data"]
+    try:
+        t = yf.Ticker(sym)
+        df = t.history(period=period, interval=interval)
+        if df.empty:
+            return cached["data"] if cached else []
+        candles = []
+        for idx, row in df.iterrows():
+            ts_str = idx.strftime("%Y-%m-%d %H:%M") if hasattr(idx, "strftime") else str(idx)[:16]
+            candles.append({
+                "t": ts_str,
+                "o": round(float(row["Open"]), 4),
+                "h": round(float(row["High"]), 4),
+                "l": round(float(row["Low"]), 4),
+                "c": round(float(row["Close"]), 4),
+                "v": int(row.get("Volume", 0)),
+            })
+        ohlcv_cache[key] = {"ts": now, "data": candles}
+        return candles
+    except Exception as e:
+        print(f"[OHLCV] {sym}: {e}")
+        return cached["data"] if cached else []
 
 
 def sauver_ml():
@@ -162,9 +240,15 @@ def fetch_prix():
         sauver()
 
 
-def analyser_ml_details(sym, nom, prix_serie, expo, decision):
+def analyser_ml_details(sym, nom, hist_df, expo, decision):
     try:
-        features = calculer_features(prix_serie)
+        prix_serie = hist_df["Close"].dropna()
+        volume = hist_df.get("Volume")
+        high = hist_df.get("High")
+        low = hist_df.get("Low")
+        open_ = hist_df.get("Open")
+
+        features = calculer_features_v2(prix_serie, volume=volume, high=high, low=low, open_=open_)
         masque = features.notna().all(axis=1)
         feat_valid = features[masque]
         if len(feat_valid) < 300:
@@ -174,62 +258,99 @@ def analyser_ml_details(sym, nom, prix_serie, expo, decision):
         cible = (ret_demain > 0).astype(float)
 
         train_end = len(feat_valid) - 1
-        train_start = max(0, train_end - 252)
-        X_train = feat_valid.iloc[train_start:train_end]
+        val_size = min(63, train_end // 5)
+        train_start = max(0, train_end - 252 - val_size)
+        train_stop = train_end - val_size
+
+        X_train = feat_valid.iloc[train_start:train_stop]
         y_train = cible.loc[X_train.index].dropna()
         X_train = X_train.loc[y_train.index]
 
-        if len(X_train) < 100:
+        X_val = feat_valid.iloc[train_stop:train_end]
+        y_val = cible.loc[X_val.index].dropna()
+        X_val = X_val.loc[y_val.index]
+
+        if len(X_train) < 100 or len(X_val) < 10:
             return
 
         scaler = StandardScaler()
-        X_s = scaler.fit_transform(X_train)
-
-        clf = RandomForestClassifier(
-            n_estimators=50, max_depth=5,
-            min_samples_leaf=20, random_state=42, n_jobs=1,
-        )
-        clf.fit(X_s, y_train)
-
-        y_pred = clf.predict(X_s)
-        acc_train = round(accuracy_score(y_train, y_pred) * 100, 1)
-
-        test_size = min(63, len(feat_valid) - train_end)
-        if test_size > 10:
-            X_test = feat_valid.iloc[train_end - test_size:train_end]
-            y_test = cible.loc[X_test.index].dropna()
-            X_test = X_test.loc[y_test.index]
-            if len(X_test) > 5:
-                X_test_s = scaler.transform(X_test)
-                y_pred_test = clf.predict(X_test_s)
-                acc_test = round(accuracy_score(y_test, y_pred_test) * 100, 1)
-            else:
-                acc_test = None
-        else:
-            acc_test = None
-
-        importances = clf.feature_importances_
+        X_train_s = scaler.fit_transform(X_train)
+        X_val_s = scaler.transform(X_val)
+        X_last_s = scaler.transform(feat_valid.iloc[[-1]])
         feat_names = list(features.columns)
-        feat_imp = {feat_names[i]: round(float(importances[i]) * 100, 1) for i in range(len(feat_names))}
-        feat_imp_sorted = dict(sorted(feat_imp.items(), key=lambda x: -x[1]))
+
+        now_ts = time.time()
+        clf_custom = None
+        if sym not in hyperopt_derniere_run or (now_ts - hyperopt_derniere_run[sym]) > HYPEROPT_INTERVAL:
+            try:
+                print(f"  [HYPEROPT] {nom}: optimisation Optuna (30 trials)...")
+                h_results = optimiser_tous(
+                    X_train_s, y_train.values, X_val_s, y_val.values,
+                    n_trials=30, seed=42,
+                )
+                if h_results:
+                    hyperopt_cache[sym] = h_results
+                    hyperopt_derniere_run[sym] = now_ts
+                    clf_custom = construire_classifieurs_optimises(h_results, seed=42)
+                    best_h = min(h_results.values(), key=lambda r: r.log_loss_val)
+                    print(f"  [HYPEROPT] {nom}: meilleur={best_h.nom} LogLoss={best_h.log_loss_val} Acc={best_h.accuracy_val}%")
+                    ml_etat.setdefault("hyperopt", {})[sym] = {
+                        r.nom: {"params": r.meilleurs_params, "log_loss": r.log_loss_val, "accuracy": r.accuracy_val}
+                        for r in h_results.values()
+                    }
+            except Exception as e:
+                print(f"  [HYPEROPT] {nom}: {e}")
+        elif sym in hyperopt_cache:
+            clf_custom = construire_classifieurs_optimises(hyperopt_cache[sym], seed=42)
+
+        meilleur, tous_resultats = benchmark_classifieurs(
+            X_train_s, y_train.values,
+            X_val_s, y_val.values,
+            X_last_s, feat_names,
+            classifieurs_custom=clf_custom,
+        )
+        if meilleur is None:
+            return
+
+        proba_hausse = meilleur.proba_hausse
+        proba_baisse = round(100 - proba_hausse, 1)
+
+        if sym not in probas_historiques:
+            probas_historiques[sym] = []
+        probas_historiques[sym].append(proba_hausse)
+        if len(probas_historiques[sym]) > 100:
+            probas_historiques[sym] = probas_historiques[sym][-100:]
+
+        seuil_a, seuil_v = seuil_dynamique(
+            np.array(probas_historiques[sym]), n_std=1.0,
+        )
+        ml_etat["seuils_dynamiques"][sym] = {
+            "achat": seuil_a, "vente": seuil_v,
+        }
 
         last_row = feat_valid.iloc[-1]
         feat_vals = {c: round(float(last_row[c]), 4) for c in features.columns}
 
-        X_last = scaler.transform(feat_valid.iloc[[-1]])
-        proba = clf.predict_proba(X_last)
-        proba_hausse = round(float(proba[0, 1]) * 100, 1) if proba.shape[1] == 2 else 50.0
-        proba_baisse = round(100 - proba_hausse, 1)
+        bench_resume = {}
+        for rnom, r in tous_resultats.items():
+            bench_resume[rnom] = {
+                "accuracy": r.accuracy_val,
+                "log_loss": r.log_loss_val,
+                "proba_hausse": r.proba_hausse,
+            }
+        ml_etat["benchmark_classifieurs"][sym] = bench_resume
 
-        hist_expo = []
-        recent = signal if 'signal' in dir() else None
-        if recent is None:
-            sig_series = pd.Series(0.0, index=prix_serie.index)
-            sig_series.iloc[-1] = expo
         n_recent = min(30, len(feat_valid))
         recent_feat = feat_valid.iloc[-n_recent:]
         recent_s = scaler.transform(recent_feat)
-        recent_proba = clf.predict_proba(recent_s)
+
+        from sklearn.ensemble import RandomForestClassifier
+        rf_quick = RandomForestClassifier(
+            n_estimators=50, max_depth=5, min_samples_leaf=20,
+            random_state=42, n_jobs=1,
+        )
+        rf_quick.fit(X_train_s, y_train.values)
+        recent_proba = rf_quick.predict_proba(recent_s)
         hist_expo = [round(float(p[1]) * 100, 1) if len(p) == 2 else 50.0 for p in recent_proba]
         hist_dates = [d.strftime("%m-%d") for d in recent_feat.index]
 
@@ -239,14 +360,19 @@ def analyser_ml_details(sym, nom, prix_serie, expo, decision):
             "exposition": round(expo * 100, 1),
             "proba_hausse": proba_hausse,
             "proba_baisse": proba_baisse,
-            "accuracy_train": acc_train,
-            "accuracy_test": acc_test,
+            "meilleur_modele": meilleur.nom,
+            "accuracy_val": meilleur.accuracy_val,
+            "log_loss": meilleur.log_loss_val,
             "jours_entrainement": len(X_train),
-            "feature_importance": feat_imp_sorted,
+            "jours_validation": len(X_val),
+            "feature_importance": meilleur.feature_importance,
             "feature_valeurs": feat_vals,
             "historique_expo": hist_expo,
             "historique_dates": hist_dates,
             "prix": round(float(prix_serie.iloc[-1]), 2),
+            "seuil_achat": seuil_a,
+            "seuil_vente": seuil_v,
+            "nb_classifieurs": len(tous_resultats),
         }
     except Exception as e:
         print(f"  [ML-DETAIL] {nom}: {e}")
@@ -255,14 +381,28 @@ def analyser_ml_details(sym, nom, prix_serie, expo, decision):
 def analyser_et_trader():
     now = datetime.now(timezone.utc)
     etat["derniere_analyse"] = now.strftime("%Y-%m-%d %H:%M")
-    etat["prochaine_analyse"] = (now + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+    etat["prochaine_analyse"] = (now + timedelta(seconds=TRADE_INTERVAL)).strftime("%Y-%m-%d %H:%M")
 
     print(f"\n{'='*50}")
     print(f"[TRADE] Analyse a {now.strftime('%H:%M:%S')} UTC")
     print(f"  Cash: {etat['cash']:.2f}$ | Capital: {etat['capital']:.2f}$")
 
+    peut, raison_block = protections.peut_trader("", etat.get("drawdown", 0.0))
+    if not peut:
+        print(f"  PROTECTIONS ACTIVES: {raison_block}")
+        etat["protection_active"] = raison_block
+        with lock:
+            sauver()
+        return
+    etat["protection_active"] = ""
+
     for sym, nom in ACTIFS.items():
         try:
+            peut_sym, raison_sym = protections.peut_trader(sym, etat.get("drawdown", 0.0))
+            if not peut_sym:
+                print(f"  {nom}: BLOQUE - {raison_sym}")
+                continue
+
             t = yf.Ticker(sym)
             hist = t.history(period="2y", interval="1d")
             if hist.empty or len(hist) < 300:
@@ -276,9 +416,13 @@ def analyser_et_trader():
             signal = ml.calculer_exposition(prix_serie)
             expo = float(signal.iloc[-1])
 
-            if expo >= 0.5:
+            seuil_a = ml_etat["seuils_dynamiques"].get(sym, {}).get("achat", 55.0)
+            seuil_v = ml_etat["seuils_dynamiques"].get(sym, {}).get("vente", 40.0)
+            proba_pct = expo * 100
+
+            if proba_pct >= seuil_a:
                 decision = "ACHAT"
-            elif expo <= 0.35:
+            elif proba_pct <= seuil_v:
                 decision = "CASH"
             else:
                 decision = "NEUTRE"
@@ -288,9 +432,11 @@ def analyser_et_trader():
                 "decision": decision,
                 "exposition": round(expo, 3),
                 "prix": round(prix_actuel, 2),
+                "seuil_achat": seuil_a,
+                "seuil_vente": seuil_v,
             }
 
-            analyser_ml_details(sym, nom, prix_serie, expo, decision)
+            analyser_ml_details(sym, nom, hist, expo, decision)
             sauver_ml()
 
             pos = etat["positions"].get(sym, {})
@@ -316,13 +462,20 @@ def analyser_et_trader():
                         "montant": round(montant, 2),
                         "capital": round(etat["cash"], 2),
                     })
-                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (expo {expo:.0%})")
+                    protections.apres_trade(sym, 0.0)
+                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% >= seuil {seuil_a}%)")
                 else:
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
 
             elif decision == "CASH" and pos.get("en_position"):
                 valeur = pos["quantite"] * prix_actuel
                 pnl = valeur - pos["montant_entree"]
+
+                rentable, raison_fee = protections.fee_filter.est_rentable(pnl, pos["montant_entree"])
+                if not rentable and pnl > 0:
+                    print(f"  {nom}: VENTE annulee - {raison_fee}")
+                    continue
+
                 etat["cash"] += valeur
                 if pnl >= 0:
                     etat["trades_gagnants"] += 1
@@ -340,13 +493,11 @@ def analyser_et_trader():
                     "pnl": round(pnl, 2),
                     "capital": round(etat["cash"], 2),
                 })
+                protections.apres_trade(sym, pnl)
                 print(f"  {nom}: VENTE {valeur:.2f}$ (PnL: {pnl:+.2f}$)")
 
             else:
-                print(f"  {nom}: {decision} | {prix_actuel:.2f} | expo {expo:.0%}")
-
-            if len(etat["trades"]) > 60:
-                etat["trades"] = etat["trades"][-60:]
+                print(f"  {nom}: {decision} | {prix_actuel:.2f} | proba {proba_pct:.0f}% (seuils: A>{seuil_a}% V<{seuil_v}%)")
 
         except Exception as e:
             print(f"  {nom}: ERREUR - {e}")
@@ -356,6 +507,7 @@ def analyser_et_trader():
         ml_etat["timestamp"] = now.strftime("%Y-%m-%d %H:%M:%S")
         sauver()
         sauver_ml()
+        sauver_historique(etat["trades"])
 
     total_pos = sum(1 for p in etat["positions"].values() if p.get("en_position"))
     print(f"  Positions ouvertes: {total_pos} | Capital: {etat['capital']:.2f}$ | PnL: {etat['pnl']:+.2f}$")
@@ -373,7 +525,7 @@ def loop_prix():
 def loop_trade():
     analyser_et_trader()
     while True:
-        time.sleep(3600)
+        time.sleep(TRADE_INTERVAL)
         try:
             analyser_et_trader()
         except Exception as e:
@@ -381,40 +533,75 @@ def loop_trade():
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def _json_response(self, data):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(data.encode() if isinstance(data, str) else json.dumps(data, cls=NumpyEncoder).encode())
+
     def do_GET(self):
-        if self.path == "/api/etat":
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        params = urllib.parse.parse_qs(parsed.query)
+
+        if path == "/api/etat":
             with lock:
                 try:
                     data = ETAT_PATH.read_text()
                 except FileNotFoundError:
                     data = "{}"
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(data.encode())
+            self._json_response(data)
             return
 
-        if self.path == "/api/ml":
+        if path == "/api/ml":
             with lock:
                 try:
                     data = ML_PATH.read_text()
                 except FileNotFoundError:
                     data = "{}"
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(data.encode())
+            self._json_response(data)
             return
 
-        if self.path == "/ml":
+        if path == "/api/ohlcv":
+            sym = params.get("sym", ["BTC-USD"])[0]
+            period = params.get("period", ["5d"])[0]
+            interval = params.get("interval", ["5m"])[0]
+            candles = fetch_ohlcv(sym, period, interval)
+            self._json_response({"sym": sym, "candles": candles})
+            return
+
+        if path == "/api/history":
+            trades = charger_historique()
+            page = int(params.get("page", ["1"])[0])
+            per_page = int(params.get("per_page", ["50"])[0])
+            sym_filter = params.get("sym", [None])[0]
+            if sym_filter:
+                trades = [t for t in trades if t.get("sym") == sym_filter]
+            total = len(trades)
+            trades_rev = list(reversed(trades))
+            start = (page - 1) * per_page
+            end = start + per_page
+            self._json_response({
+                "trades": trades_rev[start:end],
+                "total": total,
+                "page": page,
+                "pages": (total + per_page - 1) // per_page if total > 0 else 1,
+            })
+            return
+
+        if path == "/ml":
             self.path = "/dashboard_ml.html"
             super().do_GET()
             return
 
-        if self.path == "/" or self.path == "":
+        if path == "/old":
             self.path = "/dashboard_realtime.html"
+            super().do_GET()
+            return
+
+        if path == "/" or path == "":
+            self.path = "/dashboard_mega.html"
         super().do_GET()
 
     def log_message(self, fmt, *args):
@@ -423,6 +610,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     ETAT_PATH.parent.mkdir(exist_ok=True)
+    saved_trades = charger_historique()
+    if saved_trades:
+        etat["trades"] = saved_trades
+        etat["nb_trades"] = len(saved_trades)
+        print(f"[HISTORY] {len(saved_trades)} trades charges depuis l'historique")
     sauver()
 
     server = http.server.HTTPServer(("", PORT), Handler)
@@ -432,6 +624,7 @@ def main():
     threading.Thread(target=loop_prix, daemon=True).start()
     print("[PRIX] Rafraichissement toutes les 30 secondes")
 
+    print(f"[TRADE] Intervalle: {TRADE_INTERVAL}s ({TRADE_INTERVAL//60} min)")
     print("[TRADE] Premiere analyse en cours...")
     print()
 
