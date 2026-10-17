@@ -25,7 +25,10 @@ import pandas as pd
 import yfinance as yf
 
 from src.ml.features import calculer_features, calculer_features_v2
-from src.ml.protections import GestionnaireProtections
+from src.ml.protections import (
+    GestionnaireProtections, calculer_atr, calculer_sl_structurel,
+    calculer_tp_structurel, position_sizing_atr, trailing_paliers,
+)
 from src.ml.multi_classifier import benchmark_classifieurs, seuil_dynamique
 from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
 from src.ml.market_intel import MarketIntelligence
@@ -219,12 +222,16 @@ ml_etat = {
     ],
     "protections": {
         "max_drawdown": "-5%",
+        "circuit_breaker": "-8% DD, recovery 95%",
         "stoploss_guard": "3 pertes consecutives",
         "cooldown": "300s par actif",
         "fee_filter": "gain > 2x frais",
-        "stop_fixe": "-5% par trade",
-        "trailing_stop": "-3% depuis pic (active a +2%)",
-        "take_profit": "+8% par trade",
+        "atr_sizing": "2% risk / (ATR * 1.5)",
+        "sl_structurel": "swing low 15 bougies",
+        "trailing_paliers": "avance 1.75x risk",
+        "take_profit": "swing high ou +8%",
+        "daily_limits": "perte -3$ / gain +15$ jour",
+        "equity_tasks": "coupe pire si DD>-6%, ferme tout si +20%",
     },
     "seuils_dynamiques": {},
     "benchmark_classifieurs": {},
@@ -374,9 +381,12 @@ def verifier_tp_trailing(sym, nom, prix):
         pos["stop_loss"] = round(entry * 1.005, 4)
         cortex_log("ML", "TRAILING", f"{nom}: Trailing actif, SL releve a breakeven+0.5% ({pos['stop_loss']:.2f})")
     if pos.get("trailing_active") and pos["pic_prix"] > 0:
-        trail_sl = round(pos["pic_prix"] * 0.97, 4)
-        if trail_sl > pos.get("stop_loss", 0):
-            pos["stop_loss"] = trail_sl
+        sl_initial = pos.get("sl_initial", entry * 0.95)
+        nouveau_sl = trailing_paliers(entry, sl_initial, prix, palier_ratio=1.75)
+        trail_sl_pct = round(pos["pic_prix"] * 0.97, 4)
+        nouveau_sl = max(nouveau_sl, trail_sl_pct)
+        if nouveau_sl > pos.get("stop_loss", 0):
+            pos["stop_loss"] = nouveau_sl
     if tp and prix >= tp:
         now = datetime.now(timezone.utc)
         valeur = pos["quantite"] * prix
@@ -658,14 +668,64 @@ def analyser_et_trader():
     print(f"[TRADE] Analyse a {now.strftime('%H:%M:%S')} UTC")
     print(f"  Cash: {etat['cash']:.2f}$ | Capital: {etat['capital']:.2f}$")
 
-    peut, raison_block = protections.peut_trader("", etat.get("drawdown", 0.0))
+    peut, raison_block = protections.peut_trader(
+        "", etat.get("drawdown", 0.0),
+        capital=etat.get("capital", 0.0), plus_haut=etat.get("plus_haut", 0.0))
     if not peut:
         print(f"  PROTECTIONS ACTIVES: {raison_block}")
+        cortex_log("WARN", "PROTECT", raison_block)
         etat["protection_active"] = raison_block
         with lock:
             sauver()
         return
     etat["protection_active"] = ""
+
+    eq_action = protections.equity_tasks.evaluer(
+        etat.get("drawdown", 0.0), etat.get("pnl_pct", 0.0),
+        etat["positions"], etat["signaux"])
+    if eq_action == "__FERMER_TOUT__":
+        cortex_log("BUY", "EQUITY", f"Profit >= {protections.equity_tasks.profit_ferme_tout}% — fermeture de toutes les positions!")
+        for sym_close, pos_close in list(etat["positions"].items()):
+            if pos_close.get("en_position"):
+                sig = etat["signaux"].get(sym_close, {})
+                px = sig.get("prix", pos_close.get("prix_entree", 0))
+                val = pos_close["quantite"] * px
+                pnl_close = val - pos_close["montant_entree"]
+                etat["cash"] += val
+                if pnl_close >= 0:
+                    etat["trades_gagnants"] += 1
+                    etat["gain_total"] += pnl_close
+                else:
+                    etat["trades_perdants"] += 1
+                    etat["perte_totale"] += abs(pnl_close)
+                etat["positions"][sym_close] = {"en_position": False}
+                etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "sym": sym_close,
+                    "nom": ACTIFS.get(sym_close, sym_close), "action": "TAKE-PROFIT",
+                    "prix": round(px, 2), "montant": round(val, 2),
+                    "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2)})
+                protections.apres_trade(sym_close, pnl_close)
+        with lock:
+            calculer_valeur_totale()
+            sauver()
+        return
+    elif eq_action and eq_action in etat["positions"]:
+        pos_pire = etat["positions"][eq_action]
+        if pos_pire.get("en_position"):
+            sig = etat["signaux"].get(eq_action, {})
+            px = sig.get("prix", pos_pire.get("prix_entree", 0))
+            val = pos_pire["quantite"] * px
+            pnl_close = val - pos_pire["montant_entree"]
+            etat["cash"] += val
+            etat["trades_perdants"] += 1
+            etat["perte_totale"] += abs(pnl_close)
+            etat["positions"][eq_action] = {"en_position": False}
+            etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "sym": eq_action,
+                "nom": ACTIFS.get(eq_action, eq_action), "action": "STOP-LOSS",
+                "prix": round(px, 2), "montant": round(val, 2),
+                "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2),
+                "raison": "EquityTask: coupe pire perdant"})
+            protections.apres_trade(eq_action, pnl_close)
+            cortex_log("STOP", "EQUITY", f"Coupe {eq_action} (pire perdant) DD={etat.get('drawdown', 0):.1f}%")
 
     def _download_hist(sym):
         try:
@@ -683,7 +743,9 @@ def analyser_et_trader():
 
     for sym, nom in ACTIFS.items():
         try:
-            peut_sym, raison_sym = protections.peut_trader(sym, etat.get("drawdown", 0.0))
+            peut_sym, raison_sym = protections.peut_trader(
+                sym, etat.get("drawdown", 0.0),
+                capital=etat.get("capital", 0.0), plus_haut=etat.get("plus_haut", 0.0))
             if not peut_sym:
                 continue
 
@@ -732,8 +794,27 @@ def analyser_et_trader():
                 intel_boost = market_intel.get_boost_dynamique(sym) if market_intel.last_scan else 1.0
                 social_boost = social_intel.get_social_boost(sym) if social_intel.last_scan else 1.0
                 boost = MARCHES_PRIORITAIRES.get(sym, 1.0) * intel_boost * social_boost * kelly
-                alloc = min(BASE_ALLOC * boost, MAX_ALLOC)
-                montant = etat["cash"] * alloc
+
+                candles = ohlcv_cache.get(f"{sym}_5d_5m", {}).get("data", [])
+                highs = [c["h"] for c in candles] if candles else []
+                lows = [c["l"] for c in candles] if candles else []
+                closes = [c["c"] for c in candles] if candles else []
+
+                atr = calculer_atr(highs, lows, closes, period=14)
+                if atr > 0:
+                    montant = position_sizing_atr(
+                        etat["cash"], risk_pct=2.0 * boost, prix_entree=prix_actuel,
+                        atr=atr, multiplier=1.5)
+                else:
+                    alloc = min(BASE_ALLOC * boost, MAX_ALLOC)
+                    montant = etat["cash"] * alloc
+
+                sl_struct = calculer_sl_structurel(lows, n=15) if lows else 0
+                tp_struct = calculer_tp_structurel(highs, n=15) if highs else 0
+
+                sl_prix = sl_struct if sl_struct > 0 and sl_struct < prix_actuel * 0.98 else round(prix_actuel * 0.95, 4)
+                tp_prix = tp_struct if tp_struct > prix_actuel * 1.02 else round(prix_actuel * 1.08, 4)
+
                 if montant >= 1:
                     qte = montant / prix_actuel
                     etat["positions"][sym] = {
@@ -742,10 +823,12 @@ def analyser_et_trader():
                         "quantite": qte,
                         "montant_entree": round(montant, 2),
                         "date": now.strftime("%Y-%m-%d %H:%M"),
-                        "stop_loss": round(prix_actuel * 0.95, 4),
-                        "take_profit": round(prix_actuel * 1.08, 4),
+                        "stop_loss": round(sl_prix, 4),
+                        "take_profit": round(tp_prix, 4),
                         "trailing_active": False,
                         "pic_prix": prix_actuel,
+                        "atr": round(atr, 6),
+                        "sl_initial": round(sl_prix, 4),
                     }
                     etat["cash"] -= montant
                     etat["nb_trades"] += 1
@@ -759,8 +842,9 @@ def analyser_et_trader():
                         "capital": round(etat["cash"], 2),
                     })
                     protections.apres_trade(sym, 0.0)
-                    cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% >= {seuil_a}% | Kelly={kelly:.2f} Intel={intel_boost:.2f} Social={social_boost:.2f}")
-                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (proba {proba_pct:.0f}% | K={kelly:.2f} I={intel_boost:.2f} S={social_boost:.2f})")
+                    sl_pct = abs((sl_prix - prix_actuel) / prix_actuel * 100)
+                    cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | ATR={atr:.4f} SL={sl_prix:.2f}(-{sl_pct:.1f}%) TP={tp_prix:.2f} | K={kelly:.2f}")
+                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (ATR sizing, SL struct={sl_prix:.2f}, TP={tp_prix:.2f})")
                 else:
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
 
