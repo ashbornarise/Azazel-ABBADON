@@ -820,11 +820,13 @@ function drawEquity(eq,ts){
   if(ts&&ts.length)eqState.ts=ts;
   const cv=document.getElementById('chart-equity');if(!cv)return;
   const dpr=window.devicePixelRatio||1;
-  const rect=cv.parentElement.getBoundingClientRect();
-  cv.width=rect.width*dpr;cv.height=260*dpr;
-  cv.style.width=rect.width+'px';cv.style.height='260px';
+  const par=cv.parentElement;
+  const cs=getComputedStyle(par);
+  const W=par.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+  cv.width=W*dpr;cv.height=260*dpr;
+  cv.style.width=W+'px';cv.style.height='260px';
   const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
-  const W=rect.width,H=260,d=eqState.data,t=eqState.ts;
+  const H=260,d=eqState.data,t=eqState.ts;
   if(!d||d.length<2){ctx.fillStyle=T.fg3;ctx.font='12px IBM Plex Mono';ctx.fillText('En attente de données...',20,H/2);return;}
 
   const pad={t:12,r:64,b:28,l:12};
