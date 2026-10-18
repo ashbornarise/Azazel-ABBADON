@@ -97,11 +97,144 @@ PHASES = [
     {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 10.0, "max_alloc": 0.25, "description": "Protection des gains"},
 ]
 
+PORTFOLIO_TP_PCT = 50.0
+CHECKPOINT_STEP = 5.0
+
 def get_phase(capital):
     for i, phase in enumerate(PHASES):
         if capital < phase["seuil"]:
             return i + 1, phase
     return 4, PHASES[-1]
+
+
+def verifier_portfolio_tp():
+    """
+    Strategie de gain portefeuille:
+    - Tous les 5% de gain: analyse chaque position, coupe les risquees
+    - A +50%: ferme TOUT pour securiser les gains
+    """
+    gain_pct = (etat["capital"] - CAPITAL_INIT) / CAPITAL_INIT * 100
+    if gain_pct <= 0:
+        return
+
+    last_checkpoint = etat.get("_last_checkpoint", 0)
+    current_checkpoint = int(gain_pct / CHECKPOINT_STEP) * CHECKPOINT_STEP
+
+    if gain_pct >= PORTFOLIO_TP_PCT:
+        now = datetime.now(timezone.utc)
+        total_pnl = 0
+        closed = 0
+        for sym, pos in list(etat["positions"].items()):
+            if not pos.get("en_position"):
+                continue
+            sig = etat["signaux"].get(sym, {})
+            prix = sig.get("prix", pos.get("prix_entree", 0))
+            if prix <= 0:
+                continue
+            valeur = pos["quantite"] * prix
+            pnl = valeur - pos["montant_entree"]
+            total_pnl += pnl
+            etat["cash"] += valeur
+            if pnl >= 0:
+                etat["trades_gagnants"] += 1
+                etat["gain_total"] += pnl
+            else:
+                etat["trades_perdants"] += 1
+                etat["perte_totale"] += abs(pnl)
+            etat["positions"][sym] = {"en_position": False}
+            broker_sell(sym)
+            etat["nb_trades"] += 1
+            etat["trades"].append({
+                "date": now.strftime("%m-%d %H:%M"),
+                "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
+                "sym": sym, "nom": ACTIFS.get(sym, sym),
+                "action": "TAKE-PROFIT",
+                "prix": round(prix, 2),
+                "montant": round(valeur, 2),
+                "pnl": round(pnl, 2),
+                "capital": round(etat["cash"], 2),
+                "raison": f"Portfolio TP +{PORTFOLIO_TP_PCT:.0f}%",
+            })
+            closed += 1
+        cortex_log("PORTFOLIO", "TP", f"PORTFOLIO TP +{gain_pct:.1f}%! Fermeture de {closed} positions | PnL total: {total_pnl:+.2f}$")
+        print(f"  [PORTFOLIO TP] +{gain_pct:.1f}% atteint! {closed} positions fermees | PnL: {total_pnl:+.2f}$")
+        etat["_last_checkpoint"] = 0
+        log_event("PORTFOLIO_TP", {"gain_pct": round(gain_pct, 1), "closed": closed, "pnl": round(total_pnl, 2), "capital": round(etat["cash"], 2)})
+        return
+
+    if current_checkpoint > last_checkpoint and current_checkpoint >= CHECKPOINT_STEP:
+        now = datetime.now(timezone.utc)
+        etat["_last_checkpoint"] = current_checkpoint
+        cortex_log("PORTFOLIO", "CHECKPOINT", f"Checkpoint +{current_checkpoint:.0f}% atteint | Capital: {etat['capital']:.2f}$")
+        print(f"  [CHECKPOINT] +{current_checkpoint:.0f}% — analyse des risques sur les positions")
+
+        positions_risk = []
+        for sym, pos in list(etat["positions"].items()):
+            if not pos.get("en_position"):
+                continue
+            sig = etat["signaux"].get(sym, {})
+            prix = sig.get("prix", pos.get("prix_entree", 0))
+            if prix <= 0:
+                continue
+            proba = sig.get("proba_hausse", 50)
+            pnl_pct = (prix - pos["prix_entree"]) / pos["prix_entree"] * 100 if pos["prix_entree"] else 0
+            sl_dist = abs(prix - pos.get("stop_loss", prix)) / prix * 100 if prix else 0
+
+            risk_score = 0
+            if proba < 40:
+                risk_score += 3
+            elif proba < 50:
+                risk_score += 1
+            if pnl_pct < -3:
+                risk_score += 3
+            elif pnl_pct < -1:
+                risk_score += 1
+            if sl_dist < 1.5:
+                risk_score += 2
+
+            positions_risk.append({
+                "sym": sym, "pnl_pct": pnl_pct, "proba": proba,
+                "risk_score": risk_score, "prix": prix, "pos": pos,
+            })
+
+        positions_risk.sort(key=lambda x: -x["risk_score"])
+
+        cut = 0
+        for pr in positions_risk:
+            if pr["risk_score"] >= 4:
+                sym = pr["sym"]
+                pos = pr["pos"]
+                prix = pr["prix"]
+                valeur = pos["quantite"] * prix
+                pnl = valeur - pos["montant_entree"]
+                etat["cash"] += valeur
+                if pnl >= 0:
+                    etat["trades_gagnants"] += 1
+                    etat["gain_total"] += pnl
+                else:
+                    etat["trades_perdants"] += 1
+                    etat["perte_totale"] += abs(pnl)
+                etat["positions"][sym] = {"en_position": False}
+                broker_sell(sym)
+                etat["nb_trades"] += 1
+                etat["trades"].append({
+                    "date": now.strftime("%m-%d %H:%M"),
+                    "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
+                    "sym": sym, "nom": ACTIFS.get(sym, sym),
+                    "action": "VENTE",
+                    "prix": round(prix, 2),
+                    "montant": round(valeur, 2),
+                    "pnl": round(pnl, 2),
+                    "capital": round(etat["cash"], 2),
+                    "raison": f"Checkpoint +{current_checkpoint:.0f}% — risk score {pr['risk_score']}",
+                })
+                cortex_log("SELL", "CHECKPOINT", f"{sym}: COUPE (risk={pr['risk_score']}, proba={pr['proba']:.0f}%, PnL={pr['pnl_pct']:+.1f}%)")
+                print(f"  [CHECKPOINT] Coupe {sym}: risk={pr['risk_score']}, proba={pr['proba']:.0f}%, PnL={pr['pnl_pct']:+.1f}%")
+                cut += 1
+
+        kept = len(positions_risk) - cut
+        cortex_log("PORTFOLIO", "CHECKPOINT", f"Checkpoint +{current_checkpoint:.0f}%: {cut} coupees, {kept} gardees")
+        log_event("CHECKPOINT", {"gain_pct": round(current_checkpoint, 0), "cut": cut, "kept": kept, "capital": round(etat["cash"], 2)})
 
 ACTIFS = {
     # === CRYPTO TOP 50 ===
@@ -499,6 +632,10 @@ def calculer_valeur_totale():
     etat["progression"] = round(total / OBJECTIF_FINAL * 100, 2)
     etat["prochain_seuil"] = phase["seuil"]
     etat["broker_connected"] = broker is not None
+    gain_pct = (total - CAPITAL_INIT) / CAPITAL_INIT * 100
+    etat["portfolio_gain_pct"] = round(gain_pct, 2)
+    etat["portfolio_tp_target"] = PORTFOLIO_TP_PCT
+    etat["next_checkpoint"] = int(gain_pct / CHECKPOINT_STEP + 1) * CHECKPOINT_STEP if gain_pct > 0 else CHECKPOINT_STEP
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -794,6 +931,9 @@ def fetch_prix():
 
     fermer_positions_avant_cloture()
     verifier_tp_deadline()
+    with lock:
+        calculer_valeur_totale()
+    verifier_portfolio_tp()
 
     prix_snap = {}
     for sym_s in ACTIFS:
