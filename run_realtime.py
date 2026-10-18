@@ -108,13 +108,17 @@ def get_phase(capital):
 
 
 def reduire_positions_excessives():
-    """Ferme les positions les plus faibles si on depasse le max autorise par la phase."""
+    """Ferme les positions les plus faibles si on depasse le max, ou trop petites pour la phase."""
     phase_num, phase = get_phase(etat["capital"])
     max_pos = phase.get("max_positions", 10)
+    min_size = etat["capital"] * phase["risk_pct"] / 100.0 * 0.25
     positions_ouvertes = [(sym, pos) for sym, pos in etat["positions"].items() if pos.get("en_position")]
     nb = len(positions_ouvertes)
-    if nb <= max_pos:
+    undersized = [s for s, p in positions_ouvertes if p.get("montant_entree", 0) < min_size]
+    if nb <= max_pos and not undersized:
         return
+    if undersized:
+        cortex_log("PORTFOLIO", "RESIZE", f"{len(undersized)} positions sous-dimensionnees detectees (min={min_size:.1f}$)")
     now = datetime.now(timezone.utc)
     scored = []
     for sym, pos in positions_ouvertes:
@@ -125,11 +129,25 @@ def reduire_positions_excessives():
         valeur = pos["quantite"] * prix
         pnl = valeur - pos["montant_entree"]
         pnl_pct = pnl / pos["montant_entree"] * 100 if pos["montant_entree"] > 0 else 0
-        scored.append((sym, pos, prix, valeur, pnl, pnl_pct))
-    scored.sort(key=lambda x: x[5])
-    a_fermer = nb - max_pos
-    cortex_log("PORTFOLIO", "TRIM", f"Reduction: {nb} positions → {max_pos} max (fermeture des {a_fermer} plus faibles)")
-    for sym, pos, prix, valeur, pnl, pnl_pct in scored[:a_fermer]:
+        is_undersized = pos.get("montant_entree", 0) < min_size
+        scored.append((sym, pos, prix, valeur, pnl, pnl_pct, is_undersized))
+    scored.sort(key=lambda x: (not x[6], x[5]))
+    to_close = set()
+    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized in scored:
+        if is_undersized:
+            to_close.add(sym)
+    remaining = nb - len(to_close)
+    if remaining > max_pos:
+        non_undersized = [s for s in scored if s[0] not in to_close]
+        for s in non_undersized[:remaining - max_pos]:
+            to_close.add(s[0])
+    if not to_close:
+        return
+    raison_txt = f"Nettoyage: {len(to_close)} positions fermees (sous-dim ou exces)"
+    cortex_log("PORTFOLIO", "TRIM", raison_txt)
+    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized in scored:
+        if sym not in to_close:
+            continue
         nom = ACTIFS.get(sym, sym)
         etat["cash"] += valeur
         if pnl >= 0:
@@ -141,19 +159,20 @@ def reduire_positions_excessives():
         etat["positions"][sym] = {"en_position": False}
         broker_sell(sym)
         etat["nb_trades"] += 1
+        tag = "RESIZE" if is_undersized else "TRIM"
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
             "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
             "sym": sym, "nom": nom,
-            "action": "TRIM",
+            "action": tag,
             "prix": round(prix, 2),
             "montant": round(valeur, 2),
             "pnl": round(pnl, 2),
             "capital": round(etat["cash"], 2),
-            "raison": f"Reduction {nb}→{max_pos} positions",
+            "raison": f"Position {pos.get('montant_entree',0):.1f}$ < min {min_size:.1f}$" if is_undersized else f"Exces positions",
         })
-        log_event("TRIM", {"sym": sym, "pnl": round(pnl, 2), "pnl_pct": round(pnl_pct, 1), "capital": round(etat["cash"], 2)})
-        print(f"  [TRIM] {nom}: fermeture ({pnl_pct:+.1f}%) — reduction a {max_pos} positions max")
+        log_event(tag, {"sym": sym, "montant_entree": pos.get("montant_entree", 0), "min_size": round(min_size, 1), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2)})
+        print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%) — montant {pos.get('montant_entree',0):.1f}$ < min {min_size:.1f}$" if is_undersized else f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%)")
 
 
 def verifier_portfolio_tp():
