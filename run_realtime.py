@@ -483,6 +483,7 @@ def verifier_tp_trailing(sym, nom, prix):
         etat["positions"][sym] = {"en_position": False}
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
+            "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
             "sym": sym, "nom": nom,
             "action": "TAKE-PROFIT",
             "prix": round(prix, 2),
@@ -509,6 +510,7 @@ def verifier_tp_trailing(sym, nom, prix):
         etat["positions"][sym] = {"en_position": False}
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
+            "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
             "sym": sym, "nom": nom,
             "action": "STOP-LOSS",
             "prix": round(prix, 2),
@@ -544,6 +546,7 @@ def executer_stop_loss(sym, nom, prix):
     etat["positions"][sym] = {"en_position": False}
     etat["trades"].append({
         "date": now.strftime("%m-%d %H:%M"),
+        "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
         "sym": sym, "nom": nom,
         "action": "STOP-LOSS",
         "prix": round(prix, 2),
@@ -797,7 +800,7 @@ def analyser_et_trader():
                     etat["trades_perdants"] += 1
                     etat["perte_totale"] += abs(pnl_close)
                 etat["positions"][sym_close] = {"en_position": False}
-                etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "sym": sym_close,
+                etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "ts_utc": now.strftime("%Y-%m-%dT%H:%M"), "sym": sym_close,
                     "nom": ACTIFS.get(sym_close, sym_close), "action": "TAKE-PROFIT",
                     "prix": round(px, 2), "montant": round(val, 2),
                     "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2)})
@@ -818,7 +821,7 @@ def analyser_et_trader():
             etat["trades_perdants"] += 1
             etat["perte_totale"] += abs(pnl_close)
             etat["positions"][eq_action] = {"en_position": False}
-            etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "sym": eq_action,
+            etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "ts_utc": now.strftime("%Y-%m-%dT%H:%M"), "sym": eq_action,
                 "nom": ACTIFS.get(eq_action, eq_action), "action": "STOP-LOSS",
                 "prix": round(px, 2), "montant": round(val, 2),
                 "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2),
@@ -937,6 +940,7 @@ def analyser_et_trader():
                     protections.stop_technique.ouvrir_position(sym, prix_actuel)
                     etat["trades"].append({
                         "date": now.strftime("%m-%d %H:%M"),
+                        "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
                         "sym": sym, "nom": nom,
                         "action": "ACHAT",
                         "prix": round(prix_actuel, 2),
@@ -971,6 +975,7 @@ def analyser_et_trader():
                 protections.stop_technique.fermer_position(sym)
                 etat["trades"].append({
                     "date": now.strftime("%m-%d %H:%M"),
+                    "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
                     "sym": sym, "nom": nom,
                     "action": "VENTE",
                     "prix": round(prix_actuel, 2),

@@ -930,47 +930,57 @@ function drawChart(idx){
   const sSMC=activeIndicator==='smc'||activeIndicator==='all';
   if(sSMC&&slice.length>=12){const smc=detectSMC(ac);drawSMC(ctx,smc,slice,startI,toX,toY,cw,mL,W,mR);}
 
-  // Trade arrows
+  // Trade arrows — match by closest candle using price + timestamp proximity
   const symTrades=(etatGlobal.trades||[]).filter(t=>t.sym===p.sym);
-  const _tfMinMap={'1m':1,'5m':5,'15m':15,'1h':60,'1d':1440};
   symTrades.forEach(t=>{
-    const tDate=t.date||'';
-    if(tDate.length<11){return;}
-    // Parse trade date "MM-DD HH:MM"
-    const tMM=tDate.slice(0,2),tDD=tDate.slice(3,5);
-    const tHH=parseInt(tDate.slice(6,8),10),tMn=parseInt(tDate.slice(9,11),10);
-    const tMinutes=tHH*60+tMn;
-    const intv=_tfMinMap[p.tf]||5;
     let ci=-1;
-    for(let i=0;i<slice.length;i++){
-      const ct=slice[i].t||'';
-      let cMM,cDD,cTime;
-      if(ct.length>=16&&ct[4]==='-'){
-        // "2026-10-16 14:25" or "2026-10-16T14:25"
-        cMM=ct.slice(5,7);cDD=ct.slice(8,10);cTime=ct.slice(11,16);
-      }else if(ct.length>=11){
-        cMM=ct.slice(0,2);cDD=ct.slice(3,5);cTime=ct.slice(6,11);
-      }else continue;
-      if(cMM!==tMM||cDD!==tDD)continue;
-      if(!cTime||cTime.length<5)continue;
-      const cHH=parseInt(cTime.slice(0,2),10),cMn=parseInt(cTime.slice(3,5),10);
-      const cMinutes=cHH*60+cMn;
-      if(tMinutes>=cMinutes&&tMinutes<cMinutes+intv){ci=i;break;}
+    const tPrice=t.prix||0;
+    // Method 1: use ts_utc if available (full ISO "YYYY-MM-DDTHH:MM")
+    const tsUtc=t.ts_utc||'';
+    if(tsUtc.length>=16){
+      const tMs=new Date(tsUtc+'Z').getTime();
+      if(!isNaN(tMs)){
+        let bestDist=Infinity;
+        for(let i=0;i<slice.length;i++){
+          const ct=slice[i].t||'';
+          let cMs;
+          if(ct.includes('T'))cMs=new Date(ct).getTime();
+          else cMs=new Date(ct.replace(' ','T')).getTime();
+          if(isNaN(cMs))continue;
+          const dist=Math.abs(cMs-tMs);
+          if(dist<bestDist){bestDist=dist;ci=i;}
+        }
+        // Max 4h tolerance for timezone differences
+        if(bestDist>4*3600*1000)ci=-1;
+      }
     }
-    // Fallback: closest candle on same day
+    // Method 2: fallback on MM-DD + closest time (old format)
     if(ci<0){
-      let bestDist=Infinity;
-      for(let i=0;i<slice.length;i++){
-        const ct=slice[i].t||'';
-        let cMM,cDD,cTime;
-        if(ct.length>=16&&ct[4]==='-'){cMM=ct.slice(5,7);cDD=ct.slice(8,10);cTime=ct.slice(11,16);}
-        else if(ct.length>=11){cMM=ct.slice(0,2);cDD=ct.slice(3,5);cTime=ct.slice(6,11);}
-        else continue;
-        if(cMM!==tMM||cDD!==tDD)continue;
-        if(!cTime||cTime.length<5)continue;
-        const cHH=parseInt(cTime.slice(0,2),10),cMn=parseInt(cTime.slice(3,5),10);
-        const dist=Math.abs((cHH*60+cMn)-tMinutes);
-        if(dist<bestDist){bestDist=dist;ci=i;}
+      const tDate=t.date||'';
+      if(tDate.length>=11){
+        const tMM=tDate.slice(0,2),tDD=tDate.slice(3,5);
+        const tHH=parseInt(tDate.slice(6,8),10),tMn=parseInt(tDate.slice(9,11),10);
+        const tMin=tHH*60+tMn;
+        let bestDist=Infinity;
+        for(let i=0;i<slice.length;i++){
+          const ct=slice[i].t||'';
+          let cMM,cDD,cTime;
+          if(ct.length>=16&&ct[4]==='-'){cMM=ct.slice(5,7);cDD=ct.slice(8,10);cTime=ct.slice(11,16);}
+          else if(ct.length>=11){cMM=ct.slice(0,2);cDD=ct.slice(3,5);cTime=ct.slice(6,11);}
+          else continue;
+          if(cMM!==tMM||cDD!==tDD)continue;
+          if(!cTime||cTime.length<5)continue;
+          const cHH=parseInt(cTime.slice(0,2),10),cMn=parseInt(cTime.slice(3,5),10);
+          const dist=Math.abs((cHH*60+cMn)-tMin);
+          if(dist<bestDist){bestDist=dist;ci=i;}
+        }
+      }
+    }
+    // Method 3: price-based — find candle whose range contains trade price
+    if(ci<0&&tPrice>0){
+      for(let i=slice.length-1;i>=0;i--){
+        const c=slice[i];
+        if(tPrice>=c.l&&tPrice<=c.h){ci=i;break;}
       }
     }
     if(ci<0)return;
@@ -980,16 +990,16 @@ function drawChart(idx){
     if(isBuy){
       const ay=toY(c.l)+14;
       ctx.fillStyle='#00e676';ctx.beginPath();
-      ctx.moveTo(x,ay-10);ctx.lineTo(x-6,ay);ctx.lineTo(x+6,ay);ctx.closePath();ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,.5)';ctx.lineWidth=1;ctx.beginPath();
-      ctx.moveTo(x,ay-10);ctx.lineTo(x-6,ay);ctx.lineTo(x+6,ay);ctx.closePath();ctx.stroke();
+      ctx.moveTo(x,ay-12);ctx.lineTo(x-7,ay);ctx.lineTo(x+7,ay);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1.5;ctx.stroke();
+      _smcLabel(ctx,t.action+' '+tPrice.toFixed(1),x+10,ay-4,'#00e676');
     }else if(isSell){
       const ay=toY(c.h)-14;
       const col=t.action==='STOP-LOSS'?'#ff1744':t.action==='TAKE-PROFIT'?'#00e5ff':'#ff9100';
       ctx.fillStyle=col;ctx.beginPath();
-      ctx.moveTo(x,ay+10);ctx.lineTo(x-6,ay);ctx.lineTo(x+6,ay);ctx.closePath();ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,.5)';ctx.lineWidth=1;ctx.beginPath();
-      ctx.moveTo(x,ay+10);ctx.lineTo(x-6,ay);ctx.lineTo(x+6,ay);ctx.closePath();ctx.stroke();
+      ctx.moveTo(x,ay+12);ctx.lineTo(x-7,ay);ctx.lineTo(x+7,ay);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1.5;ctx.stroke();
+      _smcLabel(ctx,t.action+' '+tPrice.toFixed(1),x+10,ay+8,col);
     }
   });
 
