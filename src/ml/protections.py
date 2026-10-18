@@ -319,7 +319,7 @@ def position_sizing_atr(capital: float, risk_pct: float, prix_entree: float,
     if atr_pct <= 0:
         return 0.0
     montant = risk_amount / atr_pct
-    return min(montant, capital * 0.30)
+    return min(montant, capital * 0.80)
 
 
 def trailing_paliers(prix_entree: float, sl_actuel: float, prix_actuel: float,

@@ -91,10 +91,10 @@ MAX_ALLOC = 0.80
 OBJECTIF_FINAL = 10000.0
 
 PHASES = [
-    {"nom": "Phase 1 - Aggressif",  "seuil": 250,   "risk_pct": 60.0, "max_alloc": 0.80, "description": "All-in controlé"},
-    {"nom": "Phase 2 - Fondation",  "seuil": 1000,  "risk_pct": 40.0, "max_alloc": 0.60, "description": "Gros sizing"},
-    {"nom": "Phase 3 - Croissance", "seuil": 5000,  "risk_pct": 25.0, "max_alloc": 0.40, "description": "Confiant"},
-    {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 10.0, "max_alloc": 0.25, "description": "Protection des gains"},
+    {"nom": "Phase 1 - Aggressif",  "seuil": 250,   "risk_pct": 60.0, "max_alloc": 0.80, "max_positions": 5,  "description": "All-in controlé"},
+    {"nom": "Phase 2 - Fondation",  "seuil": 1000,  "risk_pct": 40.0, "max_alloc": 0.60, "max_positions": 8,  "description": "Gros sizing"},
+    {"nom": "Phase 3 - Croissance", "seuil": 5000,  "risk_pct": 25.0, "max_alloc": 0.40, "max_positions": 12, "description": "Confiant"},
+    {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 10.0, "max_alloc": 0.25, "max_positions": 20, "description": "Protection des gains"},
 ]
 
 PORTFOLIO_TP_PCT = 50.0
@@ -636,6 +636,9 @@ def calculer_valeur_totale():
     etat["portfolio_gain_pct"] = round(gain_pct, 2)
     etat["portfolio_tp_target"] = PORTFOLIO_TP_PCT
     etat["next_checkpoint"] = int(gain_pct / CHECKPOINT_STEP + 1) * CHECKPOINT_STEP if gain_pct > 0 else CHECKPOINT_STEP
+    nb_ouvertes = sum(1 for p in etat["positions"].values() if p.get("en_position"))
+    etat["max_positions"] = phase.get("max_positions", 10)
+    etat["positions_ouvertes"] = nb_ouvertes
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -1230,6 +1233,13 @@ def analyser_et_trader():
             pos = etat["positions"].get(sym, {})
 
             if decision == "ACHAT" and not pos.get("en_position"):
+                phase_num, phase = get_phase(etat["capital"])
+                max_pos = phase.get("max_positions", 10)
+                nb_ouvertes = sum(1 for p in etat["positions"].values() if p.get("en_position"))
+                if nb_ouvertes >= max_pos:
+                    print(f"  {nom}: SKIP — max positions atteint ({nb_ouvertes}/{max_pos})")
+                    continue
+
                 growth_ratio = etat["capital"] / CAPITAL_INIT
                 if growth_ratio >= 1.0:
                     kelly = min(1.0 + (growth_ratio - 1.0) * 0.5, 2.0)
@@ -1245,7 +1255,6 @@ def analyser_et_trader():
                 closes = [c["c"] for c in candles] if candles else []
 
                 atr = calculer_atr(highs, lows, closes, period=14)
-                phase_num, phase = get_phase(etat["capital"])
                 phase_risk = phase["risk_pct"]
                 phase_max_alloc = phase["max_alloc"]
                 if atr > 0:
