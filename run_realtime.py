@@ -1050,14 +1050,26 @@ def loop_social():
     time.sleep(30)
     while True:
         try:
-            cortex_log("INFO", "SOCIAL", "Scan Reddit/Twitter en cours...")
-            sentiments = social_intel.scan_reddit()
+            cortex_log("INFO", "SOCIAL", "Scan Reddit + News RSS + Fear&Greed...")
+            sentiments = social_intel.scan_all()
             trending = social_intel.trending
+            fg = social_intel.fear_greed
+            fg_str = ""
+            if fg.get("crypto"):
+                fg_str += f"Crypto F&G: {fg['crypto']['value']} ({fg['crypto']['label']})"
+            if fg.get("market"):
+                fg_str += f" | Market F&G: {fg['market']['value']} ({fg['market']['label']})"
+            if fg_str:
+                cortex_log("ML", "SOCIAL", fg_str)
             if trending:
                 top3 = ", ".join(f"{s[0]}({s[1]['label']})" for s in trending[:3])
-                cortex_log("ML", "SOCIAL", f"Trending: {top3} | {len(sentiments)} tickers detectes sur {social_intel.to_dict()['total_posts']} posts")
+                d = social_intel.to_dict()
+                cortex_log("ML", "SOCIAL", f"Trending: {top3} | {len(sentiments)} tickers | {d['total_posts']} posts Reddit | {d['total_news']} news")
             else:
-                cortex_log("INFO", "SOCIAL", "Aucun ticker detecte dans les posts")
+                cortex_log("INFO", "SOCIAL", "Aucun ticker detecte")
+            headlines = social_intel.news_headlines[:3]
+            for h in headlines:
+                cortex_log("INFO", "NEWS", f"[{h['source']}] {h['title'][:80]}")
         except Exception as e:
             cortex_log("ERR", "SOCIAL", f"Erreur scan social: {e}")
         time.sleep(300)
