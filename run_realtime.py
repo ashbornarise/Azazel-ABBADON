@@ -1390,6 +1390,22 @@ def main():
     if reconstructed:
         etat["nb_trades"] = max(etat.get("nb_trades", 0), len(etat["trades"]))
         print(f"[HISTORY] {reconstructed} trades ACHAT reconstruits depuis les positions ouvertes")
+    # Fix positions without SL/TP (loaded from old state)
+    fixed_sl_tp = 0
+    for sym, pos in etat.get("positions", {}).items():
+        if not pos.get("en_position"):
+            continue
+        prix = pos.get("prix_entree", 0)
+        if prix <= 0:
+            continue
+        if not pos.get("stop_loss") or pos["stop_loss"] <= 0:
+            pos["stop_loss"] = round(prix * 0.95, 4)
+            fixed_sl_tp += 1
+        if not pos.get("take_profit") or pos["take_profit"] <= 0:
+            pos["take_profit"] = round(prix * 1.08, 4)
+    if fixed_sl_tp:
+        print(f"[FIX] {fixed_sl_tp} positions: SL/TP par defaut ajoutes (-5%/+8%)")
+
     sauver()
     sauver_historique(etat["trades"])
 
