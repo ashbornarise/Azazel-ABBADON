@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="logo-rex.png">
 <link rel="apple-touch-icon" href="logo-rex.png">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Archivo:wght@500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.344.0/umd/lucide.min.js"></script>
 <style>
 :root{
   --bg:#f4f4f6;--bg2:#eaeaee;--bg3:#dddde4;--panel:#e4e4ea;
@@ -214,6 +215,19 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
   .cortex-line{font-size:11px}
   .chart-overlay .ohlc{font-size:11px}
 }
+/* === WINDOW MANAGER === */
+.chart-grid{gap:0!important}
+.wm-resize-col{cursor:col-resize;background:var(--rule);transition:background .15s;min-width:3px}
+.wm-resize-col:hover{background:var(--gold);opacity:.7}
+.wm-resize-row{cursor:row-resize;background:var(--rule);transition:background .15s;min-height:3px}
+.wm-resize-row:hover{background:var(--gold);opacity:.7}
+.wm-titlebar{cursor:default;-webkit-user-select:none;user-select:none}
+.chart-min-btn{display:inline-flex;align-items:center;justify-content:center}
+/* === UI IMPROVEMENTS === */
+.kpi{background:linear-gradient(135deg,var(--bg2) 0%,rgba(139,105,20,.05) 100%)}
+tbody tr:hover{background:var(--bg3);transition:background .15s}
+.panel{box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.chart-panel{box-shadow:0 1px 3px rgba(0,0,0,.04)}
 </style>
 </head>
 <body>
@@ -221,13 +235,13 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
   <div class="brand">
     <img class="logo" src="logo-rex.png" alt="RC">
     <span class="title">Rex Clemens Terminal</span>
-    <span class="sub">V2.1 · SIMULATION</span>
+    <span class="sub">V3.1 · SIMULATION</span>
   </div>
   <div class="tabs">
-    <div class="tab active" data-tab="charts">Charts</div>
-    <div class="tab" data-tab="trading">Trading</div>
-    <div class="tab" data-tab="historique">Historique</div>
-    <div class="tab" data-tab="ml">Cerveau ML</div>
+    <div class="tab active" data-tab="charts"><i data-lucide="candlestick-chart" style="width:14px;height:14px;vertical-align:middle"></i> Charts</div>
+    <div class="tab" data-tab="trading"><i data-lucide="line-chart" style="width:14px;height:14px;vertical-align:middle"></i> Trading</div>
+    <div class="tab" data-tab="historique"><i data-lucide="history" style="width:14px;height:14px;vertical-align:middle"></i> Historique</div>
+    <div class="tab" data-tab="ml"><i data-lucide="brain" style="width:14px;height:14px;vertical-align:middle"></i> Cerveau ML</div>
   </div>
   <div class="controls" id="chart-controls">
     <select id="grid-layout" onchange="changeLayout(this.value)">
@@ -235,6 +249,13 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
       <option value="2x2">2x2</option>
       <option value="3x3">3x3</option>
       <option value="1x1">Focus</option>
+    </select>
+    <select id="window-layout" onchange="windowLayout(this.value)">
+      <option value="">Window</option>
+      <option value="tile-h">Tile Horizontal</option>
+      <option value="tile-v">Tile Vertical</option>
+      <option value="tile-2x3">Tile 2x3</option>
+      <option value="equal">Equal Sizes</option>
     </select>
     <select id="indicator-select" onchange="toggleIndicator(this.value)">
       <option value="bb" selected>Bollinger</option>
@@ -244,7 +265,7 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
       <option value="all">Tous</option>
       <option value="none">Aucun</option>
     </select>
-    <button onclick="refreshAll()">&#x21bb;</button>
+    <button onclick="refreshAll()"><i data-lucide="refresh-cw" style="width:14px;height:14px"></i></button>
   </div>
   <div class="status">
     <div class="dot"></div>
@@ -256,13 +277,13 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
   <div class="charts-layout">
     <div class="chart-grid grid-2x3" id="chart-grid"></div>
     <div class="side-panel">
-      <div class="sp-header">Portfolio</div>
+      <div class="sp-header"><i data-lucide="wallet" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></i> Portfolio</div>
       <div class="sp-section"><div class="sp-label">Capital</div><div class="sp-value" id="sp-capital">$100.00</div></div>
       <div class="sp-section"><div class="sp-label">P&L</div><div class="sp-value" id="sp-pnl">$0.00</div></div>
       <div class="sp-section"><div class="sp-label">Positions ouvertes</div><div id="sp-pos-count" style="font-size:14px;font-weight:700">0</div></div>
-      <div class="sp-header" style="margin-top:2px">Positions</div>
+      <div class="sp-header" style="margin-top:2px"><i data-lucide="trending-up" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></i> Positions</div>
       <div class="sp-positions" id="sp-positions"><div style="padding:10px;color:var(--fg2);font-size:11px">Aucune position</div></div>
-      <div class="sp-header">Derniers trades</div>
+      <div class="sp-header"><i data-lucide="list" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></i> Derniers trades</div>
       <div class="sp-trades" id="sp-trades"></div>
     </div>
   </div>
@@ -272,7 +293,7 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
   <div class="scroll-tab">
     <div class="kpi-row" id="kpi-grid"></div>
     <div class="grid-2">
-      <div class="panel"><div class="panel-hdr"><span class="panel-title">Courbe de Capital</span><span style="font-size:10px;color:var(--fg2)" id="equity-info"></span><div class="eq-nav" style="display:flex;gap:4px;margin-left:auto"><button class="eq-btn" onclick="eqNav('zout')" title="Zoom -">−</button><button class="eq-btn" onclick="eqNav('left')" title="Reculer">◀</button><button class="eq-btn" onclick="eqNav('right')" title="Avancer">▶</button><button class="eq-btn" onclick="eqNav('zin')" title="Zoom +">+</button><button class="eq-btn" onclick="eqNav('reset')" title="Reset">⟳</button></div></div><div class="panel-body" style="position:relative"><canvas id="chart-equity" height="260"></canvas></div></div>
+      <div class="panel"><div class="panel-hdr"><span class="panel-title">Courbe de Capital</span><span style="font-size:10px;color:var(--fg2)" id="equity-info"></span><div class="eq-nav" style="display:flex;gap:4px;margin-left:auto"><button class="eq-btn" onclick="eqNav('zout')" title="Zoom -"><i data-lucide="minus" style="width:14px;height:14px"></i></button><button class="eq-btn" onclick="eqNav('left')" title="Reculer"><i data-lucide="chevron-left" style="width:14px;height:14px"></i></button><button class="eq-btn" onclick="eqNav('right')" title="Avancer"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></button><button class="eq-btn" onclick="eqNav('zin')" title="Zoom +"><i data-lucide="plus" style="width:14px;height:14px"></i></button><button class="eq-btn" onclick="eqNav('reset')" title="Reset"><i data-lucide="rotate-ccw" style="width:14px;height:14px"></i></button></div></div><div class="panel-body" style="position:relative"><canvas id="chart-equity" height="260"></canvas></div></div>
       <div class="panel"><div class="panel-hdr"><span class="panel-title">Positions Actives</span></div><div class="panel-body" style="max-height:280px;overflow-y:auto"><table><thead><tr><th>Actif</th><th>Signal</th><th>Prix</th><th>Expo</th><th>Qte</th><th>PnL Lat.</th></tr></thead><tbody id="table-positions"></tbody></table></div></div>
     </div>
     <div class="panel"><div class="panel-hdr"><span class="panel-title">Derniers Trades</span></div><div class="panel-body" style="max-height:300px;overflow-y:auto"><table><thead><tr><th>Date</th><th>Actif</th><th>Action</th><th>Prix</th><th>Montant</th><th>PnL</th><th>Capital</th></tr></thead><tbody id="table-trades-recent"></tbody></table></div></div>
@@ -341,6 +362,7 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
 <div class="bottombar">
   <span id="bottom-time"></span>
   <span>300+ marchés</span>
+  <span style="display:inline-flex;align-items:center;gap:4px"><canvas id="eq-sparkline" width="80" height="16" style="vertical-align:middle"></canvas><span id="spark-label" style="font-size:9px"></span></span>
   <span><img src="logo-rex.png" alt="RC" style="height:14px;vertical-align:middle;margin-right:4px;opacity:.7">Rex Clemens Capital &copy; 2026</span>
 </div>
 
@@ -503,6 +525,121 @@ const ALL_SYMS = [
 
 let gridSize={cols:3,rows:2,total:6}, panels=[], etatGlobal={}, activeIndicator='bb', activeTab='charts';
 
+// === WINDOW MANAGER ===
+const wmState={colSizes:[1,1,1],rowSizes:[1,1],maximized:-1,hidden:new Set()};
+function refreshIcons(){if(typeof lucide!=='undefined')try{lucide.createIcons();}catch(e){}}
+function initWMState(){
+  wmState.colSizes=new Array(gridSize.cols).fill(1);
+  wmState.rowSizes=new Array(gridSize.rows).fill(1);
+  wmState.maximized=-1;
+  wmState.hidden.clear();
+}
+function applyGridSizes(){
+  const grid=document.getElementById('chart-grid');if(!grid)return;
+  const mob=window.innerWidth<=600;
+  if(mob)return;
+  if(wmState.maximized>=0){
+    panels.forEach((p,i)=>{const el=document.getElementById('body-'+i);if(el)el.parentElement.style.display=i===wmState.maximized?'':'none';});
+    grid.style.gridTemplateColumns='1fr';grid.style.gridTemplateRows='1fr';
+    document.querySelectorAll('.wm-resize-handle').forEach(h=>h.style.display='none');
+    return;
+  }
+  panels.forEach((p,i)=>{const el=document.getElementById('body-'+i);if(el)el.parentElement.style.display=wmState.hidden.has(i)?'none':'';});
+  const colT=wmState.colSizes.map((s,i)=>s.toFixed(3)+'fr'+(i<wmState.colSizes.length-1?' 3px':'')).join(' ');
+  const rowT=wmState.rowSizes.map((s,i)=>s.toFixed(3)+'fr'+(i<wmState.rowSizes.length-1?' 3px':'')).join(' ');
+  grid.style.gridTemplateColumns=colT;grid.style.gridTemplateRows=rowT;
+  document.querySelectorAll('.wm-resize-handle').forEach(h=>h.style.display='');
+}
+function toggleMaximize(idx){
+  if(wmState.maximized===idx){wmState.maximized=-1;}
+  else{wmState.maximized=idx;}
+  applyGridSizes();
+  if(wmState.maximized>=0)drawChart(idx);
+  else panels.forEach((p,i)=>setTimeout(()=>drawChart(i),30));
+  saveState();
+}
+function hidePanel(idx){
+  wmState.hidden.add(idx);
+  const el=document.getElementById('body-'+idx);
+  if(el)el.parentElement.style.display='none';
+  saveState();
+}
+function windowLayout(mode){
+  if(!mode)return;
+  const total=gridSize.total;
+  wmState.maximized=-1;wmState.hidden.clear();
+  if(mode==='tile-h'){gridSize={cols:1,rows:total,total};}
+  else if(mode==='tile-v'){gridSize={cols:total,rows:1,total};}
+  else if(mode==='tile-2x3'){gridSize={cols:3,rows:2,total:6};}
+  else if(mode==='equal'){initWMState();applyGridSizes();panels.forEach((p,i)=>drawChart(i));document.getElementById('window-layout').value='';return;}
+  buildCharts();document.getElementById('window-layout').value='';
+}
+let _rafResize=0;
+function setupColResize(handle,colIdx){
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault();
+    const startX=e.clientX,startSizes=[...wmState.colSizes];
+    const grid=document.getElementById('chart-grid'),gr=grid.getBoundingClientRect();
+    const totalFr=startSizes.reduce((a,b)=>a+b,0);
+    const availW=gr.width-(wmState.colSizes.length-1)*3;
+    const pxPerFr=availW/totalFr;
+    document.body.style.cursor='col-resize';document.body.style.userSelect='none';
+    const onMove=ev=>{
+      const dFr=(ev.clientX-startX)/pxPerFr;
+      wmState.colSizes[colIdx]=Math.max(.15,startSizes[colIdx]+dFr);
+      wmState.colSizes[colIdx+1]=Math.max(.15,startSizes[colIdx+1]-dFr);
+      applyGridSizes();
+      cancelAnimationFrame(_rafResize);
+      _rafResize=requestAnimationFrame(()=>panels.forEach((p,i)=>drawChart(i)));
+    };
+    const onUp=()=>{
+      document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
+      document.body.style.cursor='';document.body.style.userSelect='';
+      panels.forEach((p,i)=>drawChart(i));saveState();
+    };
+    document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+  });
+}
+function setupRowResize(handle,rowIdx){
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault();
+    const startY=e.clientY,startSizes=[...wmState.rowSizes];
+    const grid=document.getElementById('chart-grid'),gr=grid.getBoundingClientRect();
+    const totalFr=startSizes.reduce((a,b)=>a+b,0);
+    const availH=gr.height-(wmState.rowSizes.length-1)*3;
+    const pxPerFr=availH/totalFr;
+    document.body.style.cursor='row-resize';document.body.style.userSelect='none';
+    const onMove=ev=>{
+      const dFr=(ev.clientY-startY)/pxPerFr;
+      wmState.rowSizes[rowIdx]=Math.max(.15,startSizes[rowIdx]+dFr);
+      wmState.rowSizes[rowIdx+1]=Math.max(.15,startSizes[rowIdx+1]-dFr);
+      applyGridSizes();
+      cancelAnimationFrame(_rafResize);
+      _rafResize=requestAnimationFrame(()=>panels.forEach((p,i)=>drawChart(i)));
+    };
+    const onUp=()=>{
+      document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
+      document.body.style.cursor='';document.body.style.userSelect='';
+      panels.forEach((p,i)=>drawChart(i));saveState();
+    };
+    document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+  });
+}
+function drawSparkline(){
+  const cv=document.getElementById('eq-sparkline');if(!cv)return;
+  const eq=eqState.data;if(!eq||eq.length<2)return;
+  const pts=eq.slice(-20);
+  const ctx=cv.getContext('2d');const W=80,H=16;
+  ctx.clearRect(0,0,W,H);
+  let hi=Math.max(...pts),lo=Math.min(...pts);const range=hi-lo||1;
+  ctx.beginPath();
+  pts.forEach((v,i)=>{const x=(i/(pts.length-1))*W,y=H-((v-lo)/range)*(H-2)-1;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+  ctx.strokeStyle=pts[pts.length-1]>=pts[0]?T.bull:T.bear;ctx.lineWidth=1.5;ctx.stroke();
+  const lbl=document.getElementById('spark-label');
+  if(lbl)lbl.textContent='$'+pts[pts.length-1].toFixed(2);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&wmState.maximized>=0)toggleMaximize(wmState.maximized);});
+
 // === TABS ===
 document.querySelectorAll('.topbar .tab').forEach(t=>{
   t.addEventListener('click',()=>{
@@ -515,12 +652,13 @@ document.querySelectorAll('.topbar .tab').forEach(t=>{
     if(activeTab==='trading') loadTradingTab();
     if(activeTab==='historique') loadHistory(1);
     if(activeTab==='ml') loadML();
+    refreshIcons();
     saveState();
   });
 });
 
 // === PERSISTENCE ===
-function saveState(){try{localStorage.setItem('rex_mt_state',JSON.stringify({layout:document.getElementById('grid-layout').value,indicator:activeIndicator,tab:activeTab,panels:panels.map(p=>({sym:p.sym,tf:p.tf,period:p.period,cw:p.cw,offset:p.offset}))}));}catch(e){}}
+function saveState(){try{localStorage.setItem('rex_mt_state',JSON.stringify({layout:document.getElementById('grid-layout').value,indicator:activeIndicator,tab:activeTab,panels:panels.map(p=>({sym:p.sym,tf:p.tf,period:p.period,cw:p.cw,offset:p.offset})),wmColSizes:wmState.colSizes,wmRowSizes:wmState.rowSizes}));}catch(e){}}
 function loadSavedState(){try{return JSON.parse(localStorage.getItem('rex_mt_state'));}catch(e){return null;}}
 function toggleIndicator(v){activeIndicator=v;panels.forEach((p,i)=>drawChart(i));saveState();}
 
@@ -649,18 +787,29 @@ function changeLayout(layout){
 function buildCharts(){
   const grid=document.getElementById('chart-grid');grid.innerHTML='';
   const saved=loadSavedState();panels=[];
+  initWMState();
+  if(saved&&saved.wmColSizes&&saved.wmColSizes.length===gridSize.cols)wmState.colSizes=saved.wmColSizes;
+  if(saved&&saved.wmRowSizes&&saved.wmRowSizes.length===gridSize.rows)wmState.rowSizes=saved.wmRowSizes;
+  const mob=window.innerWidth<=600;
   for(let i=0;i<gridSize.total&&i<ALL_SYMS.length;i++){
     const sp=saved&&saved.panels&&saved.panels[i];
     const info=sp?(ALL_SYMS.find(a=>a.s===sp.sym)||ALL_SYMS[i]):ALL_SYMS[i];
     const tf=sp?sp.tf:'5m';
     const tfMap={'1m':'1d','5m':'5d','15m':'5d','1h':'1mo','1d':'6mo'};
     const panel=document.createElement('div');panel.className='chart-panel';
-    panel.innerHTML=`<div class="chart-header"><div style="display:flex;align-items:center;gap:8px"><select class="sym-select" onchange="changeSym(${i},this.value)">${ALL_SYMS.map(a=>`<option value="${a.s}" ${a.s===info.s?'selected':''}>${a.s}</option>`).join('')}</select><span class="price" id="price-${i}">--</span><span class="change" id="change-${i}"></span></div><div class="tf-btns">${['1m','5m','15m','1h','1d'].map(t=>`<button class="tf-btn ${t===tf?'active':''}" data-idx="${i}" data-tf="${t}" onclick="changeTF(${i},'${t}')">${t}</button>`).join('')}<button class="chart-min-btn" id="min-${i}" onclick="toggleMinimize(${i})" title="Reduire/Agrandir">_</button></div></div><div class="chart-body" id="body-${i}"><canvas id="canvas-${i}"></canvas><div class="chart-overlay"><div class="ohlc" id="ohlc-${i}"></div></div><div class="chart-pos none" id="pos-${i}"></div></div>`;
+    if(!mob){const col=i%gridSize.cols,row=Math.floor(i/gridSize.cols);panel.style.gridColumn=String(col*2+1);panel.style.gridRow=String(row*2+1);}
+    panel.innerHTML=`<div class="chart-header wm-titlebar" ondblclick="toggleMaximize(${i})"><div style="display:flex;align-items:center;gap:8px"><select class="sym-select" onclick="event.stopPropagation()" onchange="changeSym(${i},this.value)">${ALL_SYMS.map(a=>`<option value="${a.s}" ${a.s===info.s?'selected':''}>${a.s}</option>`).join('')}</select><span class="price" id="price-${i}">--</span><span class="change" id="change-${i}"></span></div><div class="tf-btns">${['1m','5m','15m','1h','1d'].map(t=>`<button class="tf-btn ${t===tf?'active':''}" data-idx="${i}" data-tf="${t}" onclick="event.stopPropagation();changeTF(${i},'${t}')">${t}</button>`).join('')}<button class="chart-min-btn" id="min-${i}" onclick="event.stopPropagation();toggleMinimize(${i})" title="Minimize"><i data-lucide="minus" style="width:12px;height:12px"></i></button><button class="chart-min-btn" onclick="event.stopPropagation();toggleMaximize(${i})" title="Maximize"><i data-lucide="maximize-2" style="width:12px;height:12px"></i></button><button class="chart-min-btn" onclick="event.stopPropagation();hidePanel(${i})" title="Close"><i data-lucide="x" style="width:12px;height:12px"></i></button></div></div><div class="chart-body" id="body-${i}"><canvas id="canvas-${i}"></canvas><div class="chart-overlay"><div class="ohlc" id="ohlc-${i}"></div></div><div class="chart-pos none" id="pos-${i}"></div></div>`;
     grid.appendChild(panel);
     panels.push({sym:info.s,name:info.n,tf:tf,period:tfMap[tf]||'5d',candles:[],idx:i,cw:sp?(sp.cw||8):8,offset:sp?(sp.offset||0):0,dragging:false,dragStartX:0,dragStartOffset:0,mouseX:-1,mouseY:-1});
     setupChartInteraction(i);
   }
+  if(!mob){
+    for(let c=0;c<gridSize.cols-1;c++){const h=document.createElement('div');h.className='wm-resize-handle wm-resize-col';h.style.gridColumn=String(c*2+2);h.style.gridRow='1/-1';grid.appendChild(h);setupColResize(h,c);}
+    for(let r=0;r<gridSize.rows-1;r++){const h=document.createElement('div');h.className='wm-resize-handle wm-resize-row';h.style.gridRow=String(r*2+2);h.style.gridColumn='1/-1';grid.appendChild(h);setupRowResize(h,r);}
+    applyGridSizes();
+  }
   panels.forEach(p=>loadCandles(p.idx));
+  refreshIcons();
 }
 
 // === INTERACTION ===
@@ -719,7 +868,8 @@ function toggleMinimize(idx){
   const el=document.getElementById(`body-${idx}`).parentElement;
   el.classList.toggle('minimized');
   const btn=document.getElementById(`min-${idx}`);
-  btn.textContent=el.classList.contains('minimized')?'+':'_';
+  btn.innerHTML=el.classList.contains('minimized')?'<i data-lucide="plus" style="width:12px;height:12px"></i>':'<i data-lucide="minus" style="width:12px;height:12px"></i>';
+  refreshIcons();
   if(!el.classList.contains('minimized'))setTimeout(()=>drawChart(idx),50);
 }
 function focusChart(sym){
@@ -781,18 +931,45 @@ function drawChart(idx){
 
   // Trade arrows
   const symTrades=(etatGlobal.trades||[]).filter(t=>t.sym===p.sym);
+  const _tfMinMap={'1m':1,'5m':5,'15m':15,'1h':60,'1d':1440};
   symTrades.forEach(t=>{
     const tDate=t.date||'';
+    if(tDate.length<11){return;}
+    // Parse trade date "MM-DD HH:MM"
+    const tMM=tDate.slice(0,2),tDD=tDate.slice(3,5);
+    const tHH=parseInt(tDate.slice(6,8),10),tMn=parseInt(tDate.slice(9,11),10);
+    const tMinutes=tHH*60+tMn;
+    const intv=_tfMinMap[p.tf]||5;
     let ci=-1;
     for(let i=0;i<slice.length;i++){
       const ct=slice[i].t||'';
-      if(ct.includes(tDate.replace(' ','-'))||ct.slice(5,16).replace('T',' ')===tDate||ct.slice(5,16)===tDate){ci=i;break;}
+      let cMM,cDD,cTime;
+      if(ct.length>=16&&ct[4]==='-'){
+        // "2026-10-16 14:25" or "2026-10-16T14:25"
+        cMM=ct.slice(5,7);cDD=ct.slice(8,10);cTime=ct.slice(11,16);
+      }else if(ct.length>=11){
+        cMM=ct.slice(0,2);cDD=ct.slice(3,5);cTime=ct.slice(6,11);
+      }else continue;
+      if(cMM!==tMM||cDD!==tDD)continue;
+      if(!cTime||cTime.length<5)continue;
+      const cHH=parseInt(cTime.slice(0,2),10),cMn=parseInt(cTime.slice(3,5),10);
+      const cMinutes=cHH*60+cMn;
+      if(tMinutes>=cMinutes&&tMinutes<cMinutes+intv){ci=i;break;}
     }
+    // Fallback: closest candle on same day
     if(ci<0){
-      const mm=tDate.slice(0,5),hh=tDate.slice(6);
-      for(let i=slice.length-1;i>=0;i--){
+      let bestDist=Infinity;
+      for(let i=0;i<slice.length;i++){
         const ct=slice[i].t||'';
-        if(ct.includes(mm)&&ct.includes(hh)){ci=i;break;}
+        let cMM,cDD,cTime;
+        if(ct.length>=16&&ct[4]==='-'){cMM=ct.slice(5,7);cDD=ct.slice(8,10);cTime=ct.slice(11,16);}
+        else if(ct.length>=11){cMM=ct.slice(0,2);cDD=ct.slice(3,5);cTime=ct.slice(6,11);}
+        else continue;
+        if(cMM!==tMM||cDD!==tDD)continue;
+        if(!cTime||cTime.length<5)continue;
+        const cHH=parseInt(cTime.slice(0,2),10),cMn=parseInt(cTime.slice(3,5),10);
+        const dist=Math.abs((cHH*60+cMn)-tMinutes);
+        if(dist<bestDist){bestDist=dist;ci=i;}
       }
     }
     if(ci<0)return;
@@ -841,6 +1018,7 @@ async function loadState(){
   document.getElementById('sp-trades').innerHTML=trades.map(t=>{const cls=t.action==='ACHAT'?'buy':t.action==='STOP-LOSS'?'sl':'sell';return`<div class="sp-trade-row" onclick="focusChart('${t.sym||''}')" style="cursor:pointer"><span class="${cls}">${t.action}</span><span>${t.sym||''}</span><span>${t.montant||''}$</span></div>`;}).join('');
   document.getElementById('status-text').textContent=`${etatGlobal.nb_actifs||0} actifs · ${(etatGlobal.trades||[]).length} trades · ${pc} positions · ${etatGlobal.derniere_maj||'--'}`;
   if(activeTab==='charts')panels.forEach((p,i)=>drawChart(i));
+  drawSparkline();
   }catch(e){document.getElementById('status-text').textContent='Erreur connexion';}
 }
 
@@ -849,7 +1027,7 @@ function kpiHTML(l,v,s){return`<div class="kpi"><div class="kpi-label">${l}</div
 function loadTradingTab(){
   const d=etatGlobal,pnl=d.pnl||0,wr=d.nb_trades>0?((d.trades_gagnants||0)/d.nb_trades*100).toFixed(0):'0';
   document.getElementById('kpi-grid').innerHTML=[kpiHTML('Capital','$'+(d.capital||0).toFixed(2),`Initial: $${(d.capital_initial||100).toFixed(2)}`),kpiHTML('PnL Total',`${pnl>=0?'+':''}$${pnl.toFixed(2)}`,`${(d.pnl_pct||0).toFixed(2)}%`),kpiHTML('Drawdown',(d.drawdown||0).toFixed(2)+'%',`Plus haut: $${(d.plus_haut||0).toFixed(2)}`),kpiHTML('Cash','$'+(d.cash||0).toFixed(2),`Positions: $${(d.valeur_positions||0).toFixed(2)}`),kpiHTML('Trades',d.nb_trades||0,`G: ${d.trades_gagnants||0} / P: ${d.trades_perdants||0}`),kpiHTML('Win Rate',wr+'%',`Gain: $${(d.gain_total||0).toFixed(2)} · Perte: $${(d.perte_totale||0).toFixed(2)}`)].join('');
-  drawEquity(d.equity||[],d.timestamps_equity||[]);
+  drawEquity(d.equity||[],d.timestamps_equity||[]);drawSparkline();
   document.getElementById('equity-info').textContent=`${(d.equity||[]).length} points`;
   const sigs=d.signaux||{},poss=d.positions||{};let posH='';
   for(const[sym,sig]of Object.entries(sigs)){const pos=poss[sym]||{};const dc=sig.decision==='ACHAT'?'pill-buy':sig.decision==='CASH'?'pill-sell':'pill-neutral';const pl=pos.en_position?((sig.prix-pos.prix_entree)*pos.quantite):0;posH+=`<tr><td style="color:var(--gold);font-weight:600">${sym}</td><td><span class="pill ${dc}">${sig.decision}</span></td><td>$${(sig.prix||0).toFixed(2)}</td><td>${((sig.exposition||0)*100).toFixed(0)}%</td><td>${pos.en_position?pos.quantite.toFixed(4):'—'}</td><td class="${pl>=0?'pos':'neg'}">${pos.en_position?(pl>=0?'+':'')+pl.toFixed(2)+'$':'—'}</td></tr>`;}
@@ -1293,7 +1471,8 @@ if(saved){
 }else{buildCharts();}
 loadState().then(()=>{lastTradeCount=(etatGlobal.trades||[]).length;});updateTime();
 setInterval(refreshState,15000);setInterval(refreshCharts,60000);setInterval(updateTime,1000);
-window.addEventListener('resize',()=>{if(activeTab==='charts')panels.forEach((p,i)=>drawChart(i));});
+window.addEventListener('resize',()=>{if(activeTab==='charts'){if(!_mob&&wmState.maximized<0)applyGridSizes();panels.forEach((p,i)=>drawChart(i));}drawSparkline();});
+refreshIcons();
 </script>
 </body>
 </html>
