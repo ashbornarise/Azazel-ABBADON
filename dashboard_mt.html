@@ -872,7 +872,7 @@ function setupChartInteraction(idx){
     cv.addEventListener('touchend',()=>{tDist=0;saveState();});
   }
 }
-function changeSym(idx,sym){const info=ALL_SYMS.find(a=>a.s===sym)||{s:sym,n:sym};panels[idx].sym=sym;panels[idx].name=info.n;panels[idx].offset=0;panels[idx].yZoom=1;loadCandles(idx);saveState();}
+function changeSym(idx,sym){const info=ALL_SYMS.find(a=>a.s===sym)||{s:sym,n:sym};panels[idx].sym=sym;panels[idx].name=info.n;panels[idx].offset=0;panels[idx].yZoom=1;const sel=document.querySelector(`#body-${idx}`).parentElement.querySelector('.sym-select');if(sel)sel.value=sym;loadCandles(idx);saveState();}
 function changeTF(idx,tf){const tfMap={'1m':'1d','5m':'5d','15m':'5d','1h':'1mo','1d':'6mo'};panels[idx].tf=tf;panels[idx].period=tfMap[tf]||'5d';panels[idx].offset=0;panels[idx].yZoom=1;document.querySelectorAll(`.tf-btn[data-idx="${idx}"]`).forEach(b=>b.classList.toggle('active',b.dataset.tf===tf));loadCandles(idx);saveState();}
 function toggleMinimize(idx){
   const el=document.getElementById(`body-${idx}`).parentElement;
