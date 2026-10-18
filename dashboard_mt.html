@@ -659,7 +659,7 @@ document.querySelectorAll('.topbar .tab').forEach(t=>{
 });
 
 // === PERSISTENCE ===
-function saveState(){try{localStorage.setItem('rex_mt_state',JSON.stringify({layout:document.getElementById('grid-layout').value,indicator:activeIndicator,tab:activeTab,panels:panels.map(p=>({sym:p.sym,tf:p.tf,period:p.period,cw:p.cw,offset:p.offset})),wmColSizes:wmState.colSizes,wmRowSizes:wmState.rowSizes}));}catch(e){}}
+function saveState(){try{localStorage.setItem('rex_mt_state',JSON.stringify({layout:document.getElementById('grid-layout').value,indicator:activeIndicator,tab:activeTab,panels:panels.map(p=>({sym:p.sym,tf:p.tf,period:p.period,cw:p.cw,offset:p.offset,yZoom:p.yZoom})),wmColSizes:wmState.colSizes,wmRowSizes:wmState.rowSizes}));}catch(e){}}
 function loadSavedState(){try{return JSON.parse(localStorage.getItem('rex_mt_state'));}catch(e){return null;}}
 function toggleIndicator(v){activeIndicator=v;panels.forEach((p,i)=>drawChart(i));saveState();}
 
@@ -801,7 +801,7 @@ function buildCharts(){
     if(!mob){const col=i%gridSize.cols,row=Math.floor(i/gridSize.cols);panel.style.gridColumn=String(col*2+1);panel.style.gridRow=String(row*2+1);}
     panel.innerHTML=`<div class="chart-header wm-titlebar" ondblclick="toggleMaximize(${i})"><div style="display:flex;align-items:center;gap:8px"><select class="sym-select" onclick="event.stopPropagation()" onchange="changeSym(${i},this.value)">${ALL_SYMS.map(a=>`<option value="${a.s}" ${a.s===info.s?'selected':''}>${a.s}</option>`).join('')}</select><span class="price" id="price-${i}">--</span><span class="change" id="change-${i}"></span></div><div class="tf-btns">${['1m','5m','15m','1h','1d'].map(t=>`<button class="tf-btn ${t===tf?'active':''}" data-idx="${i}" data-tf="${t}" onclick="event.stopPropagation();changeTF(${i},'${t}')">${t}</button>`).join('')}<button class="chart-min-btn" id="min-${i}" onclick="event.stopPropagation();toggleMinimize(${i})" title="Minimize"><i data-lucide="minus" style="width:12px;height:12px"></i></button><button class="chart-min-btn" onclick="event.stopPropagation();toggleMaximize(${i})" title="Maximize"><i data-lucide="maximize-2" style="width:12px;height:12px"></i></button><button class="chart-min-btn" onclick="event.stopPropagation();hidePanel(${i})" title="Close"><i data-lucide="x" style="width:12px;height:12px"></i></button></div></div><div class="chart-body" id="body-${i}"><canvas id="canvas-${i}"></canvas><div class="chart-overlay"><div class="ohlc" id="ohlc-${i}"></div></div><div class="chart-pos none" id="pos-${i}"></div></div>`;
     grid.appendChild(panel);
-    panels.push({sym:info.s,name:info.n,tf:tf,period:tfMap[tf]||'5d',candles:[],idx:i,cw:sp?(sp.cw||8):8,offset:sp?(sp.offset||0):0,dragging:false,dragStartX:0,dragStartOffset:0,mouseX:-1,mouseY:-1});
+    panels.push({sym:info.s,name:info.n,tf:tf,period:tfMap[tf]||'5d',candles:[],idx:i,cw:sp?(sp.cw||8):8,offset:sp?(sp.offset||0):0,yZoom:sp?(sp.yZoom||1):1,dragging:false,dragStartX:0,dragStartOffset:0,mouseX:-1,mouseY:-1});
     setupChartInteraction(i);
   }
   if(!mob){
@@ -823,8 +823,8 @@ function setupChartInteraction(idx){
   cv.addEventListener('mouseup',()=>{panels[idx].dragging=false;cv.style.cursor='crosshair';saveState();});
   cv.addEventListener('mouseleave',()=>{const p=panels[idx];p.dragging=false;p.mouseX=-1;p.mouseY=-1;cv.style.cursor='crosshair';drawChart(idx);});
   // desktop: wheel zoom (only non-touch)
-  cv.addEventListener('wheel',e=>{if(_mob)return;e.preventDefault();const p=panels[idx];const old=p.cw;if(e.deltaY<0)p.cw=Math.min(30,p.cw+1);else p.cw=Math.max(2,p.cw-1);if(p.cw!==old){drawChart(idx);saveState();}},{passive:false});
-  cv.addEventListener('dblclick',()=>{panels[idx].offset=0;panels[idx].cw=8;drawChart(idx);saveState();});
+  cv.addEventListener('wheel',e=>{if(_mob)return;e.preventDefault();const p=panels[idx];if(e.shiftKey||e.ctrlKey){if(e.deltaY<0)p.yZoom=Math.min(20,p.yZoom*1.25);else p.yZoom=Math.max(0.3,p.yZoom/1.25);drawChart(idx);saveState();}else{const old=p.cw;if(e.deltaY<0)p.cw=Math.min(30,p.cw+1);else p.cw=Math.max(2,p.cw-1);if(p.cw!==old){drawChart(idx);saveState();}}},{passive:false});
+  cv.addEventListener('dblclick',()=>{panels[idx].offset=0;panels[idx].cw=8;panels[idx].yZoom=1;drawChart(idx);saveState();});
   // mobile: 2-finger pinch = zoom, horizontal 2-finger swipe = pan
   if(_mob){
     cv.style.touchAction='pan-y';
@@ -863,8 +863,8 @@ function setupChartInteraction(idx){
     cv.addEventListener('touchend',()=>{tDist=0;saveState();});
   }
 }
-function changeSym(idx,sym){const info=ALL_SYMS.find(a=>a.s===sym)||{s:sym,n:sym};panels[idx].sym=sym;panels[idx].name=info.n;panels[idx].offset=0;loadCandles(idx);saveState();}
-function changeTF(idx,tf){const tfMap={'1m':'1d','5m':'5d','15m':'5d','1h':'1mo','1d':'6mo'};panels[idx].tf=tf;panels[idx].period=tfMap[tf]||'5d';panels[idx].offset=0;document.querySelectorAll(`.tf-btn[data-idx="${idx}"]`).forEach(b=>b.classList.toggle('active',b.dataset.tf===tf));loadCandles(idx);saveState();}
+function changeSym(idx,sym){const info=ALL_SYMS.find(a=>a.s===sym)||{s:sym,n:sym};panels[idx].sym=sym;panels[idx].name=info.n;panels[idx].offset=0;panels[idx].yZoom=1;loadCandles(idx);saveState();}
+function changeTF(idx,tf){const tfMap={'1m':'1d','5m':'5d','15m':'5d','1h':'1mo','1d':'6mo'};panels[idx].tf=tf;panels[idx].period=tfMap[tf]||'5d';panels[idx].offset=0;panels[idx].yZoom=1;document.querySelectorAll(`.tf-btn[data-idx="${idx}"]`).forEach(b=>b.classList.toggle('active',b.dataset.tf===tf));loadCandles(idx);saveState();}
 function toggleMinimize(idx){
   const el=document.getElementById(`body-${idx}`).parentElement;
   el.classList.toggle('minimized');
@@ -905,23 +905,15 @@ function drawChart(idx){
   const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
   const W=rect.width,H=rect.height,p=panels[idx],ac=p.candles;
   if(!ac.length){ctx.fillStyle=T.fg3;ctx.font='12px IBM Plex Mono';ctx.fillText('Chargement...',W/2-40,H/2);return;}
+  if(p.offset>=ac.length)p.offset=Math.max(0,ac.length-2);
   const mR=60,mB=20,mT=4,mL=4,cw=p.cw,gap=1;
   const maxVis=Math.floor((W-mR-mL)/(cw+gap)),vis=Math.min(ac.length,maxVis);
-  const endI=ac.length-p.offset,startI=Math.max(0,endI-vis),slice=ac.slice(startI,endI);
+  const endI=Math.max(1,ac.length-p.offset),startI=Math.max(0,endI-vis),slice=ac.slice(startI,endI);
   if(!slice.length)return;
   let hi=-Infinity,lo=Infinity;slice.forEach(c=>{if(c.h>hi)hi=c.h;if(c.l<lo)lo=c.l;});
-  // Extend range to include SL/TP/entry if position exists
-  const posData=etatGlobal.positions?etatGlobal.positions[p.sym]:null;
-  if(posData&&posData.en_position){
-    if(posData.take_profit&&posData.take_profit>0){hi=Math.max(hi,posData.take_profit);lo=Math.min(lo,posData.take_profit);}
-    if(posData.stop_loss&&posData.stop_loss>0){hi=Math.max(hi,posData.stop_loss);lo=Math.min(lo,posData.stop_loss);}
-    if(posData.prix_entree&&posData.prix_entree>0){hi=Math.max(hi,posData.prix_entree);lo=Math.min(lo,posData.prix_entree);}
-  }
-  // Include trade prices in range
-  const symTr=(etatGlobal.trades||[]).filter(t=>t.sym===p.sym);
-  symTr.forEach(t=>{if(t.prix>0){hi=Math.max(hi,t.prix);lo=Math.min(lo,t.prix);}});
-  // Add 2% padding so lines aren't at the very edge
-  const pad=(hi-lo)*0.02||0.001;hi+=pad;lo-=pad;
+  // Y-zoom: Shift+Wheel zooms vertically around midpoint
+  const yZ=p.yZoom||1;if(yZ!==1){const mid=(hi+lo)/2,halfR=(hi-lo)/2;hi=mid+halfR/yZ;lo=mid-halfR/yZ;}
+  const pad=(hi-lo)*0.04||0.001;hi+=pad;lo-=pad;
   const range=hi-lo||1,toY=v=>mT+(hi-v)*(H-mT-mB)/range,toX=i=>mL+i*(cw+gap);
 
   ctx.strokeStyle=T.grid;ctx.lineWidth=1;
@@ -1012,9 +1004,14 @@ function drawChart(idx){
     if(pos.prix_entree>=lo&&pos.prix_entree<=hi){const ey=toY(pos.prix_entree);ctx.strokeStyle='rgba(201,162,39,.6)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(mL,ey);ctx.lineTo(W-mR,ey);ctx.stroke();ctx.setLineDash([]);_labelBadge(ctx,'ENTRY '+pos.prix_entree.toFixed(2),mL+4,ey-2,'#c9a227','rgba(0,0,0,.8)');}
     if(pos.stop_loss&&pos.stop_loss>=lo&&pos.stop_loss<=hi){const sy=toY(pos.stop_loss);ctx.strokeStyle='rgba(255,82,82,.8)';ctx.lineWidth=1.5;ctx.setLineDash([6,3]);ctx.beginPath();ctx.moveTo(mL,sy);ctx.lineTo(W-mR,sy);ctx.stroke();ctx.setLineDash([]);_labelBadge(ctx,'SL '+pos.stop_loss.toFixed(2),mL+4,sy+16,'#ff5252','rgba(0,0,0,.8)');ctx.fillStyle='rgba(255,82,82,.06)';ctx.fillRect(mL,sy,W-mL-mR,H-mB-sy);}
     if(pos.take_profit&&pos.take_profit>=lo&&pos.take_profit<=hi){const ty=toY(pos.take_profit);ctx.strokeStyle='rgba(6,182,212,.8)';ctx.lineWidth=1.5;ctx.setLineDash([6,3]);ctx.beginPath();ctx.moveTo(mL,ty);ctx.lineTo(W-mR,ty);ctx.stroke();ctx.setLineDash([]);_labelBadge(ctx,'TP '+pos.take_profit.toFixed(2),mL+4,ty-2,'#06b6d4','rgba(0,0,0,.8)');ctx.fillStyle='rgba(6,182,212,.05)';ctx.fillRect(mL,mT,W-mL-mR,ty-mT);}
+    if(pos.stop_loss&&pos.stop_loss<lo){_labelBadge(ctx,'▼ SL '+pos.stop_loss.toFixed(2),mL+4,H-mB-16,'#ff5252','rgba(0,0,0,.85)');}
+    if(pos.take_profit&&pos.take_profit>hi){_labelBadge(ctx,'▲ TP '+pos.take_profit.toFixed(2),mL+4,mT+4,'#06b6d4','rgba(0,0,0,.85)');}
+    if(pos.prix_entree&&pos.prix_entree<lo){_labelBadge(ctx,'▼ ENTRY '+pos.prix_entree.toFixed(2),mL+90,H-mB-16,'#c9a227','rgba(0,0,0,.85)');}
+    if(pos.prix_entree&&pos.prix_entree>hi){_labelBadge(ctx,'▲ ENTRY '+pos.prix_entree.toFixed(2),mL+90,mT+4,'#c9a227','rgba(0,0,0,.85)');}
   }else{posEl.className='chart-pos none';}
 
   if(p.mouseX>0&&p.mouseY>0&&!p.dragging){const ci=Math.floor((p.mouseX-mL)/(cw+gap));if(ci>=0&&ci<slice.length){const cx=toX(ci)+cw/2;ctx.strokeStyle=T.cross;ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(cx,mT);ctx.lineTo(cx,H-mB);ctx.stroke();ctx.beginPath();ctx.moveTo(mL,p.mouseY);ctx.lineTo(W-mR,p.mouseY);ctx.stroke();ctx.setLineDash([]);const prM=hi-(p.mouseY-mT)/(H-mT-mB)*range;ctx.fillStyle=T.labelBg;ctx.fillRect(W-mR,p.mouseY-8,60,16);ctx.fillStyle=T.fg;ctx.font='9px IBM Plex Mono';ctx.fillText(prM>=1000?prM.toFixed(0):prM.toFixed(4),W-mR+4,p.mouseY+3);const c=slice[ci];document.getElementById(`ohlc-${idx}`).innerHTML=`<span class="lbl">O</span><span style="color:${c.c>=c.o?'var(--bull)':'var(--bear)'}">${c.o.toFixed(2)}</span><span class="lbl">H</span><span style="color:var(--bull)">${c.h.toFixed(2)}</span><span class="lbl">L</span><span style="color:var(--bear)">${c.l.toFixed(2)}</span><span class="lbl">C</span><span style="color:${c.c>=c.o?'var(--bull)':'var(--bear)'}">${c.c.toFixed(2)}</span><span class="lbl">V</span><span>${c.v>1e6?(c.v/1e6).toFixed(1)+'M':c.v>1e3?(c.v/1e3).toFixed(0)+'K':c.v}</span><span style="color:var(--fg3)">${c.t}</span>`;}}
+  if(yZ!==1){_labelBadge(ctx,'Y '+yZ.toFixed(1)+'x',W-mR-48,H-mB-14,'#888','rgba(0,0,0,.6)');}
 }
 
 // === STATE ===
@@ -1345,7 +1342,7 @@ function autoShowNewTrades(){
     }
     const info=ALL_SYMS.find(a=>a.s===sym);
     if(info){
-      panels[oldest].sym=sym;panels[oldest].name=info.n;panels[oldest].offset=0;
+      panels[oldest].sym=sym;panels[oldest].name=info.n;panels[oldest].offset=0;panels[oldest].yZoom=1;
       const sel=document.querySelectorAll('.sym-select')[oldest];
       if(sel)sel.value=sym;
       loadCandles(oldest);
