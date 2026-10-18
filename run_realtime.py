@@ -50,6 +50,11 @@ from sklearn.metrics import accuracy_score
 ETAT_PATH = Path("data/etat_realtime.json")
 ML_PATH = Path("data/etat_ml.json")
 HISTORY_PATH = Path("data/trade_history.json")
+CORTEX_LOG_PATH = Path("data/cortex_logs.jsonl")
+EQUITY_LOG_PATH = Path("data/equity_history.jsonl")
+EVENTS_LOG_PATH = Path("data/events.jsonl")
+SIGNALS_LOG_PATH = Path("data/signals_history.jsonl")
+PRICES_LOG_PATH = Path("data/prices_history.jsonl")
 PORT = int(os.environ.get("PORT", 8777))
 CAPITAL_INIT = 100.0
 TRADE_INTERVAL = 120  # 2 minutes — frequence augmentee pour capter plus de mouvements
@@ -281,14 +286,71 @@ deep_models = {}
 DEEP_RETRAIN_INTERVAL = 1800
 
 cortex_logs = []
-MAX_CORTEX_LOGS = 200
+MAX_CORTEX_LOGS = 500
+
+def _charger_cortex_logs():
+    if CORTEX_LOG_PATH.exists():
+        try:
+            lines = CORTEX_LOG_PATH.read_text().strip().split("\n")
+            recent = lines[-MAX_CORTEX_LOGS:] if len(lines) > MAX_CORTEX_LOGS else lines
+            for line in recent:
+                if line.strip():
+                    cortex_logs.append(json.loads(line))
+        except Exception:
+            pass
 
 def cortex_log(level, module, message):
     ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
-    entry = {"ts": ts, "level": level, "module": module, "msg": message}
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    entry = {"ts": ts, "date": date, "level": level, "module": module, "msg": message}
     cortex_logs.append(entry)
     if len(cortex_logs) > MAX_CORTEX_LOGS:
         del cortex_logs[:len(cortex_logs) - MAX_CORTEX_LOGS]
+    try:
+        with open(CORTEX_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+def log_event(event_type, data):
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    entry = {"ts": ts, "type": event_type, **data}
+    try:
+        with open(EVENTS_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry, cls=NumpyEncoder) + "\n")
+    except Exception:
+        pass
+
+def log_equity_point(capital, cash, positions_val, drawdown):
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    entry = {"ts": ts, "capital": round(capital, 4), "cash": round(cash, 4),
+             "positions": round(positions_val, 4), "dd": round(drawdown, 2)}
+    try:
+        with open(EQUITY_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+def log_signal(sym, nom, decision, proba, prix, seuil_a, seuil_v, modele=""):
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    entry = {"ts": ts, "sym": sym, "nom": nom, "decision": decision,
+             "proba": round(proba, 2), "prix": round(prix, 4),
+             "seuil_a": round(seuil_a, 1), "seuil_v": round(seuil_v, 1),
+             "modele": modele}
+    try:
+        with open(SIGNALS_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+def log_price_snapshot(prix_dict):
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    entry = {"ts": ts, "prices": {sym: round(p, 4) for sym, p in prix_dict.items()}}
+    try:
+        with open(PRICES_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
 
 ohlcv_cache = {}
 lock = threading.Lock()
@@ -429,6 +491,7 @@ def verifier_tp_trailing(sym, nom, prix):
             "capital": round(etat["cash"], 2),
         })
         protections.apres_trade(sym, pnl)
+        log_event("TAKE-PROFIT", {"sym": sym, "prix": round(prix, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2)})
         cortex_log("BUY", "RISK", f"{nom} ({sym}): TAKE-PROFIT @ {prix:.2f} | PnL: +{pnl:.2f}$ | +{pnl_pct:.1f}%")
         print(f"  [TAKE-PROFIT] {nom}: +{pnl:.2f}$ a {prix:.2f}")
     if sl and prix <= sl and not (tp and prix >= tp):
@@ -455,6 +518,7 @@ def verifier_tp_trailing(sym, nom, prix):
             "raison": raison,
         })
         protections.apres_trade(sym, pnl)
+        log_event("STOP-LOSS", {"sym": sym, "prix": round(prix, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "raison": raison})
         cortex_log("STOP", "RISK", f"{nom} ({sym}): {raison} @ {prix:.2f} | PnL: {pnl:+.2f}$")
         print(f"  [{raison.upper()}] {nom}: {pnl:+.2f}$ a {prix:.2f}")
 
@@ -490,6 +554,7 @@ def executer_stop_loss(sym, nom, prix):
     })
     protections.apres_trade(sym, pnl)
     protections.stop_technique.fermer_position(sym)
+    log_event("STOP-LOSS", {"sym": sym, "prix": round(prix, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "raison": raison})
     cortex_log("STOP", "RISK", f"{nom} ({sym}): STOP-LOSS @ {prix:.2f} | PnL: {pnl:+.2f}$ | {raison}")
     print(f"  [STOP-LOSS] {nom}: VENTE FORCEE a {prix:.2f} | PnL: {pnl:+.2f}$ | {raison}")
 
@@ -529,6 +594,14 @@ def fetch_prix():
 
             executer_stop_loss(sym, nom, prix)
             verifier_tp_trailing(sym, nom, prix)
+
+    prix_snap = {}
+    for sym_s in ACTIFS:
+        sig = etat.get("signaux", {}).get(sym_s, {})
+        if sig.get("prix"):
+            prix_snap[sym_s] = sig["prix"]
+    if prix_snap:
+        log_price_snapshot(prix_snap)
 
     with lock:
         calculer_valeur_totale()
@@ -698,6 +771,7 @@ def analyser_et_trader():
     if not peut:
         print(f"  PROTECTIONS ACTIVES: {raison_block}")
         cortex_log("WARN", "PROTECT", raison_block)
+        log_event("PROTECTION-BLOCK", {"raison": raison_block, "capital": round(etat.get("capital", 0), 2), "dd": round(etat.get("drawdown", 0), 2)})
         etat["protection_active"] = raison_block
         with lock:
             sauver()
@@ -728,6 +802,7 @@ def analyser_et_trader():
                     "prix": round(px, 2), "montant": round(val, 2),
                     "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2)})
                 protections.apres_trade(sym_close, pnl_close)
+                log_event("EQUITY-TAKE-PROFIT", {"sym": sym_close, "prix": round(px, 2), "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2), "raison": "fermeture_totale_profit"})
         with lock:
             calculer_valeur_totale()
             sauver()
@@ -749,6 +824,7 @@ def analyser_et_trader():
                 "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2),
                 "raison": "EquityTask: coupe pire perdant"})
             protections.apres_trade(eq_action, pnl_close)
+            log_event("EQUITY-STOP-LOSS", {"sym": eq_action, "prix": round(px, 2), "pnl": round(pnl_close, 2), "capital": round(etat["cash"], 2), "raison": "pire_perdant", "dd": round(etat.get("drawdown", 0), 2)})
             cortex_log("STOP", "EQUITY", f"Coupe {eq_action} (pire perdant) DD={etat.get('drawdown', 0):.1f}%")
 
     def _download_hist(sym):
@@ -804,6 +880,8 @@ def analyser_et_trader():
                 "seuil_vente": seuil_v,
             }
 
+            modele_nom = ml_etat.get("actifs", {}).get(sym, {}).get("meilleur_modele", "")
+            log_signal(sym, nom, decision, proba_pct, prix_actuel, seuil_a, seuil_v, modele_nom)
             analyser_ml_details(sym, nom, hist, expo, decision)
             sauver_ml()
 
@@ -866,6 +944,7 @@ def analyser_et_trader():
                         "capital": round(etat["cash"], 2),
                     })
                     protections.apres_trade(sym, 0.0)
+                    log_event("ACHAT", {"sym": sym, "prix": round(prix_actuel, 2), "montant": round(montant, 2), "capital": round(etat["cash"], 2), "sl": round(sl_prix, 4), "tp": round(tp_prix, 4), "atr": round(atr, 6), "kelly": round(kelly, 4)})
                     sl_pct = abs((sl_prix - prix_actuel) / prix_actuel * 100)
                     cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | ATR={atr:.4f} SL={sl_prix:.2f}(-{sl_pct:.1f}%) TP={tp_prix:.2f} | K={kelly:.2f}")
                     print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (ATR sizing, SL struct={sl_prix:.2f}, TP={tp_prix:.2f})")
@@ -900,6 +979,7 @@ def analyser_et_trader():
                     "capital": round(etat["cash"], 2),
                 })
                 protections.apres_trade(sym, pnl)
+                log_event("VENTE", {"sym": sym, "prix": round(prix_actuel, 2), "montant": round(valeur, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "proba": round(proba_pct, 1)})
                 cortex_log("SELL", "TRADE", f"{nom} ({sym}): VENTE {valeur:.2f}$ | PnL: {pnl:+.2f}$ | Proba {proba_pct:.0f}% <= {seuil_v}%")
                 print(f"  {nom}: VENTE {valeur:.2f}$ (PnL: {pnl:+.2f}$)")
 
@@ -916,6 +996,8 @@ def analyser_et_trader():
         sauver()
         sauver_ml()
         sauver_historique(etat["trades"])
+        log_equity_point(etat["capital"], etat["cash"],
+                         etat["valeur_positions"], etat["drawdown"])
 
     total_pos = sum(1 for p in etat["positions"].values() if p.get("en_position"))
     print(f"  Positions ouvertes: {total_pos} | Capital: {etat['capital']:.2f}$ | PnL: {etat['pnl']:+.2f}$")
@@ -1153,6 +1235,96 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
             return
 
+        if path == "/api/events":
+            lines = []
+            total_lines = 0
+            if EVENTS_LOG_PATH.exists():
+                try:
+                    raw = EVENTS_LOG_PATH.read_text().strip().split("\n")
+                    total_lines = len(raw)
+                    limit = int(params.get("limit", ["200"])[0])
+                    event_type = params.get("type", [None])[0]
+                    for line in reversed(raw):
+                        if line.strip():
+                            entry = json.loads(line)
+                            if event_type and entry.get("type") != event_type:
+                                continue
+                            lines.append(entry)
+                            if len(lines) >= limit:
+                                break
+                except Exception:
+                    pass
+            self._json_response({"events": lines, "total": total_lines})
+            return
+
+        if path == "/api/equity-history":
+            lines = []
+            if EQUITY_LOG_PATH.exists():
+                try:
+                    raw = EQUITY_LOG_PATH.read_text().strip().split("\n")
+                    limit = int(params.get("limit", ["500"])[0])
+                    for line in raw[-limit:]:
+                        if line.strip():
+                            lines.append(json.loads(line))
+                except Exception:
+                    pass
+            self._json_response({"equity": lines})
+            return
+
+        if path == "/api/cortex-history":
+            lines = []
+            if CORTEX_LOG_PATH.exists():
+                try:
+                    raw = CORTEX_LOG_PATH.read_text().strip().split("\n")
+                    limit = int(params.get("limit", ["500"])[0])
+                    module = params.get("module", [None])[0]
+                    for line in reversed(raw):
+                        if line.strip():
+                            entry = json.loads(line)
+                            if module and entry.get("module") != module:
+                                continue
+                            lines.append(entry)
+                            if len(lines) >= limit:
+                                break
+                except Exception:
+                    pass
+            self._json_response({"logs": lines})
+            return
+
+        if path == "/api/signals-history":
+            lines = []
+            if SIGNALS_LOG_PATH.exists():
+                try:
+                    raw = SIGNALS_LOG_PATH.read_text().strip().split("\n")
+                    limit = int(params.get("limit", ["500"])[0])
+                    sym_filter = params.get("sym", [None])[0]
+                    for line in reversed(raw):
+                        if line.strip():
+                            entry = json.loads(line)
+                            if sym_filter and entry.get("sym") != sym_filter:
+                                continue
+                            lines.append(entry)
+                            if len(lines) >= limit:
+                                break
+                except Exception:
+                    pass
+            self._json_response({"signals": lines})
+            return
+
+        if path == "/api/prices-history":
+            lines = []
+            if PRICES_LOG_PATH.exists():
+                try:
+                    raw = PRICES_LOG_PATH.read_text().strip().split("\n")
+                    limit = int(params.get("limit", ["200"])[0])
+                    for line in raw[-limit:]:
+                        if line.strip():
+                            lines.append(json.loads(line))
+                except Exception:
+                    pass
+            self._json_response({"snapshots": lines})
+            return
+
         if path == "/ml":
             self.path = "/dashboard_ml.html"
             super().do_GET()
@@ -1174,6 +1346,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 def main():
     ETAT_PATH.parent.mkdir(exist_ok=True)
     charger_etat()
+    _charger_cortex_logs()
     saved_trades = charger_historique()
     if saved_trades:
         etat["trades"] = saved_trades
