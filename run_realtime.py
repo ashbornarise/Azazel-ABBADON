@@ -374,6 +374,7 @@ def charger_etat():
                 "nb_trades", "trades_gagnants", "trades_perdants",
                 "gain_total", "perte_totale",
                 "positions", "equity", "timestamps_equity",
+                "trades",
             ]
             for k in keys_to_restore:
                 if k in saved:
@@ -1365,11 +1366,32 @@ def main():
     charger_etat()
     _charger_cortex_logs()
     saved_trades = charger_historique()
-    if saved_trades:
+    if saved_trades and len(saved_trades) > len(etat.get("trades", [])):
         etat["trades"] = saved_trades
-        etat["nb_trades"] = len(saved_trades)
         print(f"[HISTORY] {len(saved_trades)} trades charges depuis l'historique")
+
+    # Reconstruct missing ACHAT trades from open positions
+    existing_syms = {t["sym"] for t in etat.get("trades", []) if t.get("action") == "ACHAT"}
+    reconstructed = 0
+    for sym, pos in etat.get("positions", {}).items():
+        if pos.get("en_position") and sym not in existing_syms:
+            trade = {
+                "date": pos.get("date", "??-?? ??:??")[:11],
+                "ts_utc": pos.get("date", ""),
+                "sym": sym,
+                "nom": ACTIFS.get(sym, sym),
+                "action": "ACHAT",
+                "prix": round(pos.get("prix_entree", 0), 2),
+                "montant": round(pos.get("montant_entree", 0), 2),
+                "capital": 0,
+            }
+            etat["trades"].append(trade)
+            reconstructed += 1
+    if reconstructed:
+        etat["nb_trades"] = max(etat.get("nb_trades", 0), len(etat["trades"]))
+        print(f"[HISTORY] {reconstructed} trades ACHAT reconstruits depuis les positions ouvertes")
     sauver()
+    sauver_historique(etat["trades"])
 
     server = http.server.HTTPServer(("", PORT), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
