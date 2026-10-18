@@ -66,6 +66,20 @@ MARCHES_PRIORITAIRES = {
 }
 BASE_ALLOC = 0.15
 MAX_ALLOC = 0.30
+OBJECTIF_FINAL = 10000.0
+
+PHASES = [
+    {"nom": "Phase 1 - Survie",     "seuil": 250,   "risk_pct": 2.0, "max_alloc": 0.20, "description": "Ultra conservateur"},
+    {"nom": "Phase 2 - Fondation",  "seuil": 1000,  "risk_pct": 3.5, "max_alloc": 0.25, "description": "Modere"},
+    {"nom": "Phase 3 - Croissance", "seuil": 5000,  "risk_pct": 5.0, "max_alloc": 0.30, "description": "Confiant"},
+    {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 3.0, "max_alloc": 0.20, "description": "Protection des gains"},
+]
+
+def get_phase(capital):
+    for i, phase in enumerate(PHASES):
+        if capital < phase["seuil"]:
+            return i + 1, phase
+    return 4, PHASES[-1]
 
 ACTIFS = {
     # === CRYPTO TOP 50 ===
@@ -216,7 +230,7 @@ ml_etat = {
     "actifs": {},
     "timestamp": "-",
     "nb_features": 40,
-    "modele": "Deep Ensemble (LSTM+GRU+RF+LightGBM+XGBoost+GBM)",
+    "modele": "Deep Ensemble (LSTM+GRU+Transformer+RF+LGB+XGB+GBM+CatBoost)",
     "arbres": 100,
     "walk_forward": True,
     "taille_train": 252,
@@ -447,6 +461,13 @@ def calculer_valeur_totale():
     etat["plus_haut"] = max(etat["plus_haut"], total)
     if etat["plus_haut"] > 0:
         etat["drawdown"] = round((total - etat["plus_haut"]) / etat["plus_haut"] * 100, 2)
+    phase_num, phase = get_phase(total)
+    etat["phase"] = phase_num
+    etat["phase_nom"] = phase["nom"]
+    etat["phase_risk_pct"] = phase["risk_pct"]
+    etat["objectif"] = OBJECTIF_FINAL
+    etat["progression"] = round(total / OBJECTIF_FINAL * 100, 2)
+    etat["prochain_seuil"] = phase["seuil"]
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -1044,12 +1065,16 @@ def analyser_et_trader():
                 closes = [c["c"] for c in candles] if candles else []
 
                 atr = calculer_atr(highs, lows, closes, period=14)
+                phase_num, phase = get_phase(etat["capital"])
+                phase_risk = phase["risk_pct"]
+                phase_max_alloc = phase["max_alloc"]
                 if atr > 0:
                     montant = position_sizing_atr(
-                        etat["cash"], risk_pct=2.0 * boost, prix_entree=prix_actuel,
+                        etat["cash"], risk_pct=phase_risk * boost, prix_entree=prix_actuel,
                         atr=atr, multiplier=1.5)
+                    montant = min(montant, etat["cash"] * phase_max_alloc)
                 else:
-                    alloc = min(BASE_ALLOC * boost, MAX_ALLOC)
+                    alloc = min(BASE_ALLOC * boost, phase_max_alloc)
                     montant = etat["cash"] * alloc
 
                 sl_struct = calculer_sl_structurel(lows, n=15) if lows else 0

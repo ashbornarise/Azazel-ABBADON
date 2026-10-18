@@ -34,6 +34,12 @@ try:
 except ImportError:
     HAS_XGB = False
 
+try:
+    from catboost import CatBoostClassifier
+    HAS_CATBOOST = True
+except ImportError:
+    HAS_CATBOOST = False
+
 
 if HAS_TORCH:
     class LSTMPredictor(nn.Module):
@@ -54,8 +60,30 @@ if HAS_TORCH:
             lstm_out, _ = self.lstm(x)
             gru_out, _ = self.gru(lstm_out)
             return self.fc(gru_out[:, -1, :])
+
+    class TransformerPredictor(nn.Module):
+        def __init__(self, input_size, d_model=64, nhead=4, num_layers=2, dropout=0.2):
+            super().__init__()
+            self.input_proj = nn.Linear(input_size, d_model)
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=nhead, dim_feedforward=d_model * 2,
+                dropout=dropout, batch_first=True)
+            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+            self.fc = nn.Sequential(
+                nn.Linear(d_model, 32),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(32, 1),
+                nn.Sigmoid(),
+            )
+
+        def forward(self, x):
+            x = self.input_proj(x)
+            x = self.transformer(x)
+            return self.fc(x[:, -1, :])
 else:
     LSTMPredictor = None
+    TransformerPredictor = None
 
 
 class DeepEnsemble:
@@ -66,8 +94,9 @@ class DeepEnsemble:
         self.lr = lr
         self.scaler = StandardScaler()
         self.deep_model = None
+        self.transformer_model = None
         self.sklearn_models = {}
-        self.weights = {"deep": 0.35, "sklearn": 0.65}
+        self.weights = {"lstm_gru": 0.25, "transformer": 0.15, "sklearn": 0.60}
         self.trained = False
 
     def _build_features(self, prices):
@@ -126,6 +155,11 @@ class DeepEnsemble:
                 n_estimators=100, max_depth=5, verbosity=0, random_state=42,
                 use_label_encoder=False, eval_metric="logloss"
             )
+        if HAS_CATBOOST:
+            self.sklearn_models["CatBoost"] = CatBoostClassifier(
+                iterations=100, depth=5, learning_rate=0.05,
+                random_seed=42, verbose=0
+            )
 
         sk_probas = []
         for name, model in self.sklearn_models.items():
@@ -141,6 +175,10 @@ class DeepEnsemble:
                 self._train_deep(X_train_s, y_train, X_test_s, y_test)
             except Exception:
                 self.deep_model = None
+            try:
+                self._train_transformer(X_train_s, y_train)
+            except Exception:
+                self.transformer_model = None
 
         self.trained = True
         return True
@@ -167,6 +205,23 @@ class DeepEnsemble:
             optimizer.step()
 
         self.deep_model.eval()
+
+    def _train_transformer(self, X_train, y_train):
+        X_seq = self._make_sequences(X_train)
+        y_seq = torch.FloatTensor(y_train[self.lookback - 1:]).unsqueeze(1)
+        self.transformer_model = TransformerPredictor(
+            input_size=X_train.shape[1], d_model=64, nhead=4,
+            num_layers=2, dropout=0.2)
+        optimizer = torch.optim.Adam(self.transformer_model.parameters(), lr=self.lr)
+        criterion = nn.BCELoss()
+        self.transformer_model.train()
+        for epoch in range(self.epochs):
+            optimizer.zero_grad()
+            pred = self.transformer_model(X_seq)
+            loss = criterion(pred, y_seq[:len(pred)])
+            loss.backward()
+            optimizer.step()
+        self.transformer_model.eval()
 
     def _make_sequences(self, X, seq_len=None):
         seq_len = seq_len or min(self.lookback, 10)
@@ -196,18 +251,36 @@ class DeepEnsemble:
 
         sk_avg = np.mean(sk_probas) if sk_probas else 0.5
 
-        deep_prob = 0.5
+        lstm_prob = 0.5
         if HAS_TORCH and self.deep_model is not None:
             try:
                 self.deep_model.eval()
                 with torch.no_grad():
                     seq = self._make_sequences(X_s, seq_len=1)
-                    deep_prob = self.deep_model(seq).item()
+                    lstm_prob = self.deep_model(seq).item()
             except Exception:
-                deep_prob = sk_avg
+                lstm_prob = sk_avg
 
-        if self.deep_model is not None:
-            final = self.weights["deep"] * deep_prob + self.weights["sklearn"] * sk_avg
+        trans_prob = 0.5
+        if HAS_TORCH and self.transformer_model is not None:
+            try:
+                self.transformer_model.eval()
+                with torch.no_grad():
+                    seq = self._make_sequences(X_s, seq_len=1)
+                    trans_prob = self.transformer_model(seq).item()
+            except Exception:
+                trans_prob = sk_avg
+
+        has_lstm = self.deep_model is not None
+        has_trans = self.transformer_model is not None
+        if has_lstm and has_trans:
+            final = (self.weights["lstm_gru"] * lstm_prob +
+                     self.weights["transformer"] * trans_prob +
+                     self.weights["sklearn"] * sk_avg)
+        elif has_lstm:
+            final = 0.35 * lstm_prob + 0.65 * sk_avg
+        elif has_trans:
+            final = 0.20 * trans_prob + 0.80 * sk_avg
         else:
             final = sk_avg
 
@@ -238,6 +311,15 @@ class DeepEnsemble:
                 with torch.no_grad():
                     seq = self._make_sequences(X_s, seq_len=1)
                     breakdown["LSTM+GRU"] = round(self.deep_model(seq).item() * 100, 1)
+            except Exception:
+                pass
+
+        if HAS_TORCH and self.transformer_model is not None:
+            try:
+                self.transformer_model.eval()
+                with torch.no_grad():
+                    seq = self._make_sequences(X_s, seq_len=1)
+                    breakdown["Transformer"] = round(self.transformer_model(seq).item() * 100, 1)
             except Exception:
                 pass
 

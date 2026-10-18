@@ -168,53 +168,54 @@ th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;lett
   .bottombar{font-size:8px;padding:3px 8px}
 }
 @media(max-width:600px){
-  body{overflow-y:auto;overflow-x:hidden;height:auto;min-height:100vh}
+  body{overflow-y:auto;overflow-x:hidden;height:auto;min-height:100vh;font-size:13px}
+  *{max-width:100vw}
   .topbar{flex-wrap:wrap;gap:4px;padding:6px 8px;position:sticky;top:0;z-index:100}
   .topbar .brand{width:auto;flex-shrink:0}
   .topbar .logo{width:24px;height:24px}
   .topbar .title{font-size:10px}
+  .topbar .sub{display:none}
   .topbar .tabs{order:3;width:100%;gap:2px;justify-content:space-between}
-  .topbar .tab{padding:5px 0;font-size:9px;flex:1;text-align:center}
-  .topbar .controls{display:flex;order:2;gap:4px}
+  .topbar .tab{padding:5px 0;font-size:9px;flex:1;text-align:center;white-space:nowrap}
+  .topbar .controls{display:flex;order:2;gap:4px;flex-wrap:wrap}
   .topbar .controls select,.topbar .controls button{font-size:9px;padding:3px 6px}
   .topbar .status{display:none}
   .tab-content.active{display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
   .charts-layout{flex-direction:column;overflow-y:auto;overflow-x:hidden;height:auto;min-height:0}
   .chart-grid{display:flex!important;flex-direction:column;gap:1px;overflow:visible;height:auto}
   .grid-2x3,.grid-2x2,.grid-3x3,.grid-1x1{grid-template-columns:1fr}
-  .chart-panel{min-height:280px;height:280px;flex-shrink:0}
-  .chart-header{flex-wrap:nowrap;padding:4px 6px}
-  .chart-header select{max-width:100px;font-size:9px}
-  .chart-header .price{font-size:11px}
-  .chart-header .change{font-size:9px}
+  .chart-panel{min-height:260px;height:260px;flex-shrink:0}
+  .chart-header{flex-wrap:wrap;padding:4px 6px;gap:2px}
+  .chart-header select{max-width:90px;font-size:9px}
+  .chart-header .price{font-size:13px!important}
+  .chart-header .change{font-size:10px!important}
   .chart-header .tf-btns{gap:1px;flex-shrink:0}
   .chart-header .tf-btn{padding:2px 4px;font-size:8px}
   .side-panel{width:100%;max-height:none;height:auto;flex-direction:column;border-left:none;border-top:1px solid var(--rule);order:2;flex-shrink:0;overflow:visible}
   .side-panel .sp-section{padding:6px 10px}
   .side-panel .sp-value{font-size:14px}
-  .sp-positions{max-height:120px;overflow-y:auto}
+  .sp-positions{max-height:150px;overflow-y:auto}
+  .sp-pos-row{font-size:10px!important;flex-wrap:wrap;gap:2px!important;padding:5px 8px!important}
   .sp-trades{max-height:100px;overflow-y:auto}
+  .sp-trade-row{font-size:11px}
   .scroll-tab{padding:8px;overflow-y:auto;overflow-x:hidden;height:auto}
   .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .kpi-label{font-size:10px!important}
+  .kpi-val{font-size:16px}
+  .kpi-sub{font-size:10px!important}
   .panel-body{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{min-width:500px}
+  table{min-width:450px;font-size:10px}
   .grid-2{grid-template-columns:1fr}
   .ml-grid-3{grid-template-columns:1fr}
   .bottombar{font-size:9px;padding:4px 8px;position:sticky;bottom:0;z-index:50}
-  body{font-size:13px}
   .sp-label{font-size:10px!important}
-  .sp-pos-row{font-size:12px}
-  .sp-trade-row{font-size:11px}
-  .kpi-label{font-size:11px!important}
-  .kpi-val{font-size:18px}
-  .kpi-sub{font-size:11px!important}
-  .panel-title{font-size:13px}
-  th{font-size:11px}
-  td{font-size:12px}
-  .chart-header .price{font-size:13px!important}
-  .chart-header .change{font-size:10px!important}
+  .panel-title{font-size:12px}
+  th{font-size:10px}
+  td{font-size:11px}
   .cortex-line{font-size:11px}
-  .chart-overlay .ohlc{font-size:11px}
+  .chart-overlay .ohlc{font-size:10px}
+  .eq-nav{flex-wrap:wrap}
+  .shield-card{font-size:10px!important;padding:8px!important}
 }
 /* === WINDOW MANAGER === */
 .chart-grid{gap:0!important}
@@ -236,7 +237,7 @@ tbody tr:hover{background:var(--bg3);transition:background .15s}
   <div class="brand">
     <img class="logo" src="logo-rex.png" alt="RC">
     <span class="title">Rex Clemens Terminal</span>
-    <span class="sub">V3.1 · SIMULATION</span>
+    <span class="sub">V3.2 · SIMULATION</span>
   </div>
   <div class="tabs">
     <div class="tab active" data-tab="charts"><i data-lucide="candlestick-chart" style="width:14px;height:14px;vertical-align:middle"></i> Charts</div>
@@ -283,6 +284,13 @@ tbody tr:hover{background:var(--bg3);transition:background .15s}
       <div class="sp-section"><div class="sp-label">P&L</div><div class="sp-value" id="sp-pnl">$0.00</div></div>
       <div class="sp-section"><div class="sp-label">Positions ouvertes</div><div id="sp-pos-count" style="font-size:14px;font-weight:700">0</div></div>
       <div class="sp-section"><div class="sp-label">Gains Esperes (si TP)</div><div class="sp-value" id="sp-gains-esperes" style="color:var(--green)">$0.00</div></div>
+      <div class="sp-section" style="padding:6px 10px">
+        <div class="sp-label" id="sp-phase-label">Phase 1 - Survie</div>
+        <div style="background:var(--bg3);border-radius:4px;height:10px;margin:4px 0;overflow:hidden;position:relative">
+          <div id="sp-progress-bar" style="height:100%;background:linear-gradient(90deg,var(--gold),var(--green));border-radius:4px;transition:width .5s;width:1%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--fg3)"><span id="sp-progress-pct">1.0%</span><span>$100 -> $10K</span></div>
+      </div>
       <div class="sp-header" style="margin-top:2px"><i data-lucide="trending-up" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></i> Positions</div>
       <div class="sp-positions" id="sp-positions"><div style="padding:10px;color:var(--fg2);font-size:11px">Aucune position</div></div>
       <div class="sp-header"><i data-lucide="list" style="width:14px;height:14px;vertical-align:middle;margin-right:4px"></i> Derniers trades</div>
@@ -1028,6 +1036,8 @@ async function loadState(){
   document.getElementById('sp-positions').innerHTML=ph||'<div style="padding:10px;color:var(--fg2);font-size:11px">Aucune position</div>';
   document.getElementById('sp-pos-count').textContent=pc;
   const geEl=document.getElementById('sp-gains-esperes');geEl.textContent=`${gainsEsperes>=0?'+':''}$${gainsEsperes.toFixed(2)}`;geEl.style.color=gainsEsperes>=0?'var(--green)':'var(--red)';
+  if(etatGlobal.phase_nom){document.getElementById('sp-phase-label').textContent=etatGlobal.phase_nom+` (risk ${etatGlobal.phase_risk_pct||2}%)`;}
+  const prog=etatGlobal.progression||((etatGlobal.capital||100)/10000*100);document.getElementById('sp-progress-bar').style.width=Math.min(100,Math.max(1,prog))+'%';document.getElementById('sp-progress-pct').textContent=prog.toFixed(1)+'%';
   const trades=(etatGlobal.trades||[]).slice(-10).reverse();
   document.getElementById('sp-trades').innerHTML=trades.map(t=>{const cls=t.action==='ACHAT'?'buy':t.action==='STOP-LOSS'?'sl':'sell';return`<div class="sp-trade-row" onclick="focusChart('${t.sym||''}')" style="cursor:pointer"><span class="${cls}">${t.action}</span><span>${t.sym||''}</span><span>${t.montant||''}$</span></div>`;}).join('');
   document.getElementById('status-text').textContent=`${etatGlobal.nb_actifs||0} actifs · ${(etatGlobal.trades||[]).length} trades · ${pc} positions · ${etatGlobal.derniere_maj||'--'}`;
@@ -1297,11 +1307,13 @@ async function loadML(){
   const d=await rml.json();const stats=await rstats.json();const term=await rterm.json();
   mlData=d.actifs||{};mlStats=stats;mlBenchmarks=d.benchmark_classifieurs||{};
   const mName=(d.modele||'Deep Ensemble').replace('Deep Ensemble ','').replace(/[()]/g,'');
-  document.getElementById('ml-info-row').innerHTML=[kpiHTML('Moteur CORTEX','Deep Ensemble',`${mName} · ${d.nb_features||31} features`),kpiHTML('Walk-Forward',`${d.taille_train||252}j`,`Refit: ${d.pas_reentrain||21}j`),kpiHTML('Classifieurs','6','LSTM+GRU+RF+LGB+XGB+GBM'),kpiHTML('Mise a jour',d.timestamp||'—','')].join('');
-  const wr=stats.win_rate||0;const pf=stats.gain_total&&stats.perte_totale?Math.abs(stats.gain_total/Math.max(0.01,stats.perte_totale)):0;
+  document.getElementById('ml-info-row').innerHTML=[kpiHTML('Moteur CORTEX','Deep Ensemble',`${mName} · ${d.nb_features||31} features`),kpiHTML('Walk-Forward',`${d.taille_train||252}j`,`Refit: ${d.pas_reentrain||21}j`),kpiHTML('Classifieurs','8','LSTM+GRU+Trans+RF+LGB+XGB+GBM+Cat'),kpiHTML('Mise a jour',d.timestamp||'—','')].join('');
+  const wr=stats.win_rate||0;
+  const pf=stats.perte_totale<0?Math.abs((stats.gain_total||0)/stats.perte_totale):(stats.gain_total>0?99:0);
   const avgWin=stats.trades_gagnants>0?(stats.gain_total/stats.trades_gagnants):0;
-  const avgLoss=stats.trades_perdants>0?(stats.perte_totale/stats.trades_perdants):0;
-  const rr=avgLoss>0?Math.abs(avgWin/avgLoss):0;
+  const avgLoss=stats.trades_perdants>0?(Math.abs(stats.perte_totale)/stats.trades_perdants):0;
+  let rr=avgLoss>0?avgWin/avgLoss:0;
+  if(rr===0&&etatGlobal.positions){let tGE=0,tRk=0;for(const pos of Object.values(etatGlobal.positions)){if(!pos.en_position)continue;if(pos.take_profit&&pos.prix_entree&&pos.quantite)tGE+=(pos.take_profit-pos.prix_entree)*pos.quantite;if(pos.stop_loss&&pos.prix_entree&&pos.quantite)tRk+=Math.abs((pos.stop_loss-pos.prix_entree)*pos.quantite);}if(tRk>0)rr=tGE/tRk;}
   const radarLabels=['Win Rate','Profit Factor','Risk/Reward','Positions','Drawdown Ctrl','Diversification'];
   const radarValues=[wr, Math.min(pf*30,100), Math.min(rr*25,100), Math.min(stats.positions_actives*10,100), Math.max(0,100+stats.drawdown*2), Object.values(stats.secteurs||{}).filter(v=>v>0).length*25];
   drawRadar(document.getElementById('chart-radar'),radarLabels,radarValues,'rgba(6,182,212,1)');

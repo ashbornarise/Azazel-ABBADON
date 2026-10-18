@@ -39,6 +39,14 @@ def _try_import_xgb():
         return None
 
 
+def _try_import_catboost():
+    try:
+        from catboost import CatBoostClassifier
+        return CatBoostClassifier
+    except ImportError:
+        return None
+
+
 @dataclass
 class ClassifierResult:
     nom: str
@@ -75,6 +83,13 @@ def construire_classifieurs(seed: int = 42) -> dict:
             min_child_weight=20, random_state=seed,
             verbosity=0, n_jobs=1, use_label_encoder=False,
             eval_metric="logloss",
+        )
+
+    CatBoostCls = _try_import_catboost()
+    if CatBoostCls:
+        classifieurs["CatBoost"] = CatBoostCls(
+            iterations=100, depth=5, learning_rate=0.05,
+            random_seed=seed, verbose=0,
         )
 
     return classifieurs
