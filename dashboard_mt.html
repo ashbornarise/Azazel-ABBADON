@@ -910,6 +910,18 @@ function drawChart(idx){
   const endI=ac.length-p.offset,startI=Math.max(0,endI-vis),slice=ac.slice(startI,endI);
   if(!slice.length)return;
   let hi=-Infinity,lo=Infinity;slice.forEach(c=>{if(c.h>hi)hi=c.h;if(c.l<lo)lo=c.l;});
+  // Extend range to include SL/TP/entry if position exists
+  const posData=etatGlobal.positions?etatGlobal.positions[p.sym]:null;
+  if(posData&&posData.en_position){
+    if(posData.take_profit&&posData.take_profit>0){hi=Math.max(hi,posData.take_profit);lo=Math.min(lo,posData.take_profit);}
+    if(posData.stop_loss&&posData.stop_loss>0){hi=Math.max(hi,posData.stop_loss);lo=Math.min(lo,posData.stop_loss);}
+    if(posData.prix_entree&&posData.prix_entree>0){hi=Math.max(hi,posData.prix_entree);lo=Math.min(lo,posData.prix_entree);}
+  }
+  // Include trade prices in range
+  const symTr=(etatGlobal.trades||[]).filter(t=>t.sym===p.sym);
+  symTr.forEach(t=>{if(t.prix>0){hi=Math.max(hi,t.prix);lo=Math.min(lo,t.prix);}});
+  // Add 2% padding so lines aren't at the very edge
+  const pad=(hi-lo)*0.02||0.001;hi+=pad;lo-=pad;
   const range=hi-lo||1,toY=v=>mT+(hi-v)*(H-mT-mB)/range,toX=i=>mL+i*(cw+gap);
 
   ctx.strokeStyle=T.grid;ctx.lineWidth=1;
