@@ -930,12 +930,25 @@ function drawChart(idx){
   const sSMC=activeIndicator==='smc'||activeIndicator==='all';
   if(sSMC&&slice.length>=12){const smc=detectSMC(ac);drawSMC(ctx,smc,slice,startI,toX,toY,cw,mL,W,mR);}
 
-  // Trade arrows — match by closest candle using price + timestamp proximity
+  // Trade lines — persistent horizontal lines like SL/TP/ENTRY (always visible)
   const symTrades=(etatGlobal.trades||[]).filter(t=>t.sym===p.sym);
   symTrades.forEach(t=>{
-    let ci=-1;
     const tPrice=t.prix||0;
-    // Method 1: use ts_utc if available (full ISO "YYYY-MM-DDTHH:MM")
+    if(!tPrice||tPrice<lo||tPrice>hi)return;
+    const isBuy=t.action==='ACHAT';
+    const isSell=t.action==='VENTE'||t.action==='STOP-LOSS'||t.action==='TAKE-PROFIT';
+    const ty=toY(tPrice);
+    const col=isBuy?'#00e676':t.action==='STOP-LOSS'?'#ff1744':t.action==='TAKE-PROFIT'?'#00e5ff':'#ff9100';
+    const lbl=t.action+' $'+tPrice.toFixed(2)+(t.date?' · '+t.date:'');
+    // Horizontal dashed line spanning full chart width
+    ctx.strokeStyle=col;ctx.lineWidth=1;ctx.globalAlpha=0.7;
+    ctx.setLineDash(isBuy?[6,3]:[4,4]);
+    ctx.beginPath();ctx.moveTo(mL,ty);ctx.lineTo(W-mR,ty);ctx.stroke();
+    ctx.setLineDash([]);ctx.globalAlpha=1;
+    // Label badge on right side (always visible)
+    _labelBadge(ctx,lbl,W-mR-ctx.measureText(lbl).width-16,ty-(isBuy?2:14),col,'rgba(0,0,0,.85)');
+    // Arrow triangle at candle position if visible
+    let ci=-1;
     const tsUtc=t.ts_utc||'';
     if(tsUtc.length>=16){
       const tMs=new Date(tsUtc+'Z').getTime();
@@ -943,63 +956,42 @@ function drawChart(idx){
         let bestDist=Infinity;
         for(let i=0;i<slice.length;i++){
           const ct=slice[i].t||'';
-          let cMs;
-          if(ct.includes('T'))cMs=new Date(ct).getTime();
-          else cMs=new Date(ct.replace(' ','T')).getTime();
+          const cMs=new Date(ct.includes('T')?ct:ct.replace(' ','T')).getTime();
           if(isNaN(cMs))continue;
           const dist=Math.abs(cMs-tMs);
           if(dist<bestDist){bestDist=dist;ci=i;}
         }
-        // Max 4h tolerance for timezone differences
         if(bestDist>4*3600*1000)ci=-1;
       }
     }
-    // Method 2: fallback on MM-DD + closest time (old format)
     if(ci<0){
       const tDate=t.date||'';
       if(tDate.length>=11){
         const tMM=tDate.slice(0,2),tDD=tDate.slice(3,5);
         const tHH=parseInt(tDate.slice(6,8),10),tMn=parseInt(tDate.slice(9,11),10);
-        const tMin=tHH*60+tMn;
-        let bestDist=Infinity;
+        const tMin=tHH*60+tMn;let bestDist=Infinity;
         for(let i=0;i<slice.length;i++){
-          const ct=slice[i].t||'';
-          let cMM,cDD,cTime;
+          const ct=slice[i].t||'';let cMM,cDD,cTime;
           if(ct.length>=16&&ct[4]==='-'){cMM=ct.slice(5,7);cDD=ct.slice(8,10);cTime=ct.slice(11,16);}
-          else if(ct.length>=11){cMM=ct.slice(0,2);cDD=ct.slice(3,5);cTime=ct.slice(6,11);}
           else continue;
           if(cMM!==tMM||cDD!==tDD)continue;
-          if(!cTime||cTime.length<5)continue;
           const cHH=parseInt(cTime.slice(0,2),10),cMn=parseInt(cTime.slice(3,5),10);
           const dist=Math.abs((cHH*60+cMn)-tMin);
           if(dist<bestDist){bestDist=dist;ci=i;}
         }
       }
     }
-    // Method 3: price-based — find candle whose range contains trade price
-    if(ci<0&&tPrice>0){
-      for(let i=slice.length-1;i>=0;i--){
-        const c=slice[i];
-        if(tPrice>=c.l&&tPrice<=c.h){ci=i;break;}
+    if(ci>=0){
+      const x=toX(ci)+cw/2;
+      if(isBuy){
+        ctx.fillStyle=col;ctx.beginPath();
+        ctx.moveTo(x,ty-10);ctx.lineTo(x-7,ty);ctx.lineTo(x+7,ty);ctx.closePath();ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1.5;ctx.stroke();
+      }else{
+        ctx.fillStyle=col;ctx.beginPath();
+        ctx.moveTo(x,ty+10);ctx.lineTo(x-7,ty);ctx.lineTo(x+7,ty);ctx.closePath();ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1.5;ctx.stroke();
       }
-    }
-    if(ci<0)return;
-    const x=toX(ci)+cw/2,c=slice[ci];
-    const isBuy=t.action==='ACHAT';
-    const isSell=t.action==='VENTE'||t.action==='STOP-LOSS'||t.action==='TAKE-PROFIT';
-    if(isBuy){
-      const ay=toY(c.l)+14;
-      ctx.fillStyle='#00e676';ctx.beginPath();
-      ctx.moveTo(x,ay-12);ctx.lineTo(x-7,ay);ctx.lineTo(x+7,ay);ctx.closePath();ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1.5;ctx.stroke();
-      _smcLabel(ctx,t.action+' '+tPrice.toFixed(1),x+10,ay-4,'#00e676');
-    }else if(isSell){
-      const ay=toY(c.h)-14;
-      const col=t.action==='STOP-LOSS'?'#ff1744':t.action==='TAKE-PROFIT'?'#00e5ff':'#ff9100';
-      ctx.fillStyle=col;ctx.beginPath();
-      ctx.moveTo(x,ay+12);ctx.lineTo(x-7,ay);ctx.lineTo(x+7,ay);ctx.closePath();ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1.5;ctx.stroke();
-      _smcLabel(ctx,t.action+' '+tPrice.toFixed(1),x+10,ay+8,col);
     }
   });
 
