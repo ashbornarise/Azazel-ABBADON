@@ -107,6 +107,55 @@ def get_phase(capital):
     return 4, PHASES[-1]
 
 
+def reduire_positions_excessives():
+    """Ferme les positions les plus faibles si on depasse le max autorise par la phase."""
+    phase_num, phase = get_phase(etat["capital"])
+    max_pos = phase.get("max_positions", 10)
+    positions_ouvertes = [(sym, pos) for sym, pos in etat["positions"].items() if pos.get("en_position")]
+    nb = len(positions_ouvertes)
+    if nb <= max_pos:
+        return
+    now = datetime.now(timezone.utc)
+    scored = []
+    for sym, pos in positions_ouvertes:
+        sig = etat["signaux"].get(sym, {})
+        prix = sig.get("prix", pos.get("prix_entree", 0))
+        if prix <= 0:
+            prix = pos.get("prix_entree", 0)
+        valeur = pos["quantite"] * prix
+        pnl = valeur - pos["montant_entree"]
+        pnl_pct = pnl / pos["montant_entree"] * 100 if pos["montant_entree"] > 0 else 0
+        scored.append((sym, pos, prix, valeur, pnl, pnl_pct))
+    scored.sort(key=lambda x: x[5])
+    a_fermer = nb - max_pos
+    cortex_log("PORTFOLIO", "TRIM", f"Reduction: {nb} positions → {max_pos} max (fermeture des {a_fermer} plus faibles)")
+    for sym, pos, prix, valeur, pnl, pnl_pct in scored[:a_fermer]:
+        nom = ACTIFS.get(sym, sym)
+        etat["cash"] += valeur
+        if pnl >= 0:
+            etat["trades_gagnants"] += 1
+            etat["gain_total"] += pnl
+        else:
+            etat["trades_perdants"] += 1
+            etat["perte_totale"] += abs(pnl)
+        etat["positions"][sym] = {"en_position": False}
+        broker_sell(sym)
+        etat["nb_trades"] += 1
+        etat["trades"].append({
+            "date": now.strftime("%m-%d %H:%M"),
+            "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
+            "sym": sym, "nom": nom,
+            "action": "TRIM",
+            "prix": round(prix, 2),
+            "montant": round(valeur, 2),
+            "pnl": round(pnl, 2),
+            "capital": round(etat["cash"], 2),
+            "raison": f"Reduction {nb}→{max_pos} positions",
+        })
+        log_event("TRIM", {"sym": sym, "pnl": round(pnl, 2), "pnl_pct": round(pnl_pct, 1), "capital": round(etat["cash"], 2)})
+        print(f"  [TRIM] {nom}: fermeture ({pnl_pct:+.1f}%) — reduction a {max_pos} positions max")
+
+
 def verifier_portfolio_tp():
     """
     Strategie de gain portefeuille:
@@ -937,6 +986,7 @@ def fetch_prix():
     with lock:
         calculer_valeur_totale()
     verifier_portfolio_tp()
+    reduire_positions_excessives()
 
     prix_snap = {}
     for sym_s in ACTIFS:
