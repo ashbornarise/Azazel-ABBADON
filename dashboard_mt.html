@@ -819,7 +819,7 @@ function setupChartInteraction(idx){
   const cv=document.getElementById(`canvas-${idx}`);if(!cv)return;
   // desktop: mouse events
   cv.addEventListener('mousedown',e=>{const p=panels[idx];p.dragging=true;p.dragStartX=e.clientX;p.dragStartOffset=p.offset;cv.style.cursor='grabbing';});
-  cv.addEventListener('mousemove',e=>{const p=panels[idx];const br=cv.getBoundingClientRect();p.mouseX=e.clientX-br.left;p.mouseY=e.clientY-br.top;if(p.dragging){const dx=e.clientX-p.dragStartX;p.offset=Math.max(0,Math.round(p.dragStartOffset+dx/(p.cw+1)));p.offset=Math.min(p.offset,Math.max(0,p.candles.length-10));}drawChart(idx);});
+  cv.addEventListener('mousemove',e=>{const p=panels[idx];const br=cv.getBoundingClientRect();p.mouseX=e.clientX-br.left;p.mouseY=e.clientY-br.top;if(p.dragging){const dx=e.clientX-p.dragStartX;p.offset=Math.max(0,Math.round(p.dragStartOffset-dx/(p.cw+1)));p.offset=Math.min(p.offset,Math.max(0,p.candles.length-10));}drawChart(idx);});
   cv.addEventListener('mouseup',()=>{panels[idx].dragging=false;cv.style.cursor='crosshair';saveState();});
   cv.addEventListener('mouseleave',()=>{const p=panels[idx];p.dragging=false;p.mouseX=-1;p.mouseY=-1;cv.style.cursor='crosshair';drawChart(idx);});
   // desktop: wheel zoom (only non-touch)
@@ -854,7 +854,7 @@ function setupChartInteraction(idx){
         const newMidX=(e.touches[0].clientX+e.touches[1].clientX)/2;
         const panDx=newMidX-tMidX;
         if(Math.abs(panDx)>10){
-          p.offset=Math.max(0,Math.round(tStartOff+panDx/(p.cw+1)));
+          p.offset=Math.max(0,Math.round(tStartOff-panDx/(p.cw+1)));
           p.offset=Math.min(p.offset,Math.max(0,p.candles.length-10));
         }
         drawChart(idx);
@@ -914,7 +914,7 @@ function drawChart(idx){
   // Y-zoom: Shift+Wheel zooms vertically around midpoint
   const yZ=p.yZoom||1;if(yZ!==1){const mid=(hi+lo)/2,halfR=(hi-lo)/2;hi=mid+halfR/yZ;lo=mid-halfR/yZ;}
   const pad=(hi-lo)*0.04||0.001;hi+=pad;lo-=pad;
-  const range=hi-lo||1,toY=v=>mT+(hi-v)*(H-mT-mB)/range,toX=i=>mL+i*(cw+gap);
+  const range=hi-lo||1,toY=v=>mT+(hi-v)*(H-mT-mB)/range,toX=i=>W-mR-(slice.length-i)*(cw+gap);
 
   ctx.strokeStyle=T.grid;ctx.lineWidth=1;
   for(let i=0;i<=5;i++){const y=mT+(H-mT-mB)*i/5;ctx.beginPath();ctx.moveTo(mL,y);ctx.lineTo(W-mR,y);ctx.stroke();const val=hi-range*i/5;ctx.fillStyle=T.gridTxt;ctx.font='9px IBM Plex Mono';ctx.fillText(val>=1000?val.toFixed(0):val>=1?val.toFixed(2):val.toFixed(4),W-mR+4,y+3);}
@@ -1010,7 +1010,7 @@ function drawChart(idx){
     if(pos.prix_entree&&pos.prix_entree>hi){_labelBadge(ctx,'▲ ENTRY '+pos.prix_entree.toFixed(2),mL+90,mT+4,'#c9a227','rgba(0,0,0,.85)');}
   }else{posEl.className='chart-pos none';}
 
-  if(p.mouseX>0&&p.mouseY>0&&!p.dragging){const ci=Math.floor((p.mouseX-mL)/(cw+gap));if(ci>=0&&ci<slice.length){const cx=toX(ci)+cw/2;ctx.strokeStyle=T.cross;ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(cx,mT);ctx.lineTo(cx,H-mB);ctx.stroke();ctx.beginPath();ctx.moveTo(mL,p.mouseY);ctx.lineTo(W-mR,p.mouseY);ctx.stroke();ctx.setLineDash([]);const prM=hi-(p.mouseY-mT)/(H-mT-mB)*range;ctx.fillStyle=T.labelBg;ctx.fillRect(W-mR,p.mouseY-8,60,16);ctx.fillStyle=T.fg;ctx.font='9px IBM Plex Mono';ctx.fillText(prM>=1000?prM.toFixed(0):prM.toFixed(4),W-mR+4,p.mouseY+3);const c=slice[ci];document.getElementById(`ohlc-${idx}`).innerHTML=`<span class="lbl">O</span><span style="color:${c.c>=c.o?'var(--bull)':'var(--bear)'}">${c.o.toFixed(2)}</span><span class="lbl">H</span><span style="color:var(--bull)">${c.h.toFixed(2)}</span><span class="lbl">L</span><span style="color:var(--bear)">${c.l.toFixed(2)}</span><span class="lbl">C</span><span style="color:${c.c>=c.o?'var(--bull)':'var(--bear)'}">${c.c.toFixed(2)}</span><span class="lbl">V</span><span>${c.v>1e6?(c.v/1e6).toFixed(1)+'M':c.v>1e3?(c.v/1e3).toFixed(0)+'K':c.v}</span><span style="color:var(--fg3)">${c.t}</span>`;}}
+  if(p.mouseX>0&&p.mouseY>0&&!p.dragging){const ci=Math.floor((p.mouseX-toX(0))/(cw+gap));if(ci>=0&&ci<slice.length){const cx=toX(ci)+cw/2;ctx.strokeStyle=T.cross;ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(cx,mT);ctx.lineTo(cx,H-mB);ctx.stroke();ctx.beginPath();ctx.moveTo(mL,p.mouseY);ctx.lineTo(W-mR,p.mouseY);ctx.stroke();ctx.setLineDash([]);const prM=hi-(p.mouseY-mT)/(H-mT-mB)*range;ctx.fillStyle=T.labelBg;ctx.fillRect(W-mR,p.mouseY-8,60,16);ctx.fillStyle=T.fg;ctx.font='9px IBM Plex Mono';ctx.fillText(prM>=1000?prM.toFixed(0):prM.toFixed(4),W-mR+4,p.mouseY+3);const c=slice[ci];document.getElementById(`ohlc-${idx}`).innerHTML=`<span class="lbl">O</span><span style="color:${c.c>=c.o?'var(--bull)':'var(--bear)'}">${c.o.toFixed(2)}</span><span class="lbl">H</span><span style="color:var(--bull)">${c.h.toFixed(2)}</span><span class="lbl">L</span><span style="color:var(--bear)">${c.l.toFixed(2)}</span><span class="lbl">C</span><span style="color:${c.c>=c.o?'var(--bull)':'var(--bear)'}">${c.c.toFixed(2)}</span><span class="lbl">V</span><span>${c.v>1e6?(c.v/1e6).toFixed(1)+'M':c.v>1e3?(c.v/1e3).toFixed(0)+'K':c.v}</span><span style="color:var(--fg3)">${c.t}</span>`;}}
   if(yZ!==1){_labelBadge(ctx,'Y '+yZ.toFixed(1)+'x',W-mR-48,H-mB-14,'#888','rgba(0,0,0,.6)');}
 }
 
