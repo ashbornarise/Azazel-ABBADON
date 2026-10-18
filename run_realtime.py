@@ -47,6 +47,28 @@ from src.strategies.ml_strategy import MLStrategy
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
+# Charger .env si present
+_env_path = Path(".env")
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
+try:
+    from src.broker.alpaca_paper import AlpacaPaperBroker, HAS_ALPACA
+except ImportError:
+    HAS_ALPACA = False
+
+broker = None
+if HAS_ALPACA and os.environ.get("ALPACA_API_KEY"):
+    try:
+        broker = AlpacaPaperBroker()
+        print("[BROKER] Alpaca Paper connecte")
+    except Exception as e:
+        print(f"[BROKER] Alpaca non disponible: {e}")
+
 ETAT_PATH = Path("data/etat_realtime.json")
 ML_PATH = Path("data/etat_ml.json")
 HISTORY_PATH = Path("data/trade_history.json")
@@ -447,6 +469,14 @@ def sauver():
         json.dump(etat, f, cls=NumpyEncoder)
 
 
+def broker_sell(sym):
+    if broker:
+        try:
+            broker.sell(sym)
+        except Exception as e:
+            print(f"  [BROKER] Erreur VENTE {sym}: {e}")
+
+
 def calculer_valeur_totale():
     val_pos = 0.0
     for sym, pos in etat["positions"].items():
@@ -468,6 +498,7 @@ def calculer_valeur_totale():
     etat["objectif"] = OBJECTIF_FINAL
     etat["progression"] = round(total / OBJECTIF_FINAL * 100, 2)
     etat["prochain_seuil"] = phase["seuil"]
+    etat["broker_connected"] = broker is not None
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -503,6 +534,7 @@ def verifier_tp_trailing(sym, nom, prix):
         etat["trades_gagnants"] += 1
         etat["gain_total"] += pnl
         etat["positions"][sym] = {"en_position": False}
+        broker_sell(sym)
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
             "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
@@ -530,6 +562,7 @@ def verifier_tp_trailing(sym, nom, prix):
             etat["perte_totale"] += abs(pnl)
         raison = "Trailing SL" if pos.get("trailing_active") else "Stop-Loss -5%"
         etat["positions"][sym] = {"en_position": False}
+        broker_sell(sym)
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
             "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
@@ -566,6 +599,7 @@ def executer_stop_loss(sym, nom, prix):
         etat["trades_perdants"] += 1
         etat["perte_totale"] += abs(pnl)
     etat["positions"][sym] = {"en_position": False}
+    broker_sell(sym)
     etat["trades"].append({
         "date": now.strftime("%m-%d %H:%M"),
         "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
@@ -636,6 +670,7 @@ def fermer_positions_avant_cloture():
             etat["trades_perdants"] += 1
             etat["perte_totale"] += abs(pnl)
         etat["positions"][sym] = {"en_position": False}
+        broker_sell(sym)
         etat["nb_trades"] += 1
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
@@ -693,6 +728,7 @@ def verifier_tp_deadline():
             etat["trades_perdants"] += 1
             etat["perte_totale"] += abs(pnl)
         etat["positions"][sym] = {"en_position": False}
+        broker_sell(sym)
         etat["nb_trades"] += 1
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
@@ -959,6 +995,7 @@ def analyser_et_trader():
                     etat["trades_perdants"] += 1
                     etat["perte_totale"] += abs(pnl_close)
                 etat["positions"][sym_close] = {"en_position": False}
+                broker_sell(sym_close)
                 etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "ts_utc": now.strftime("%Y-%m-%dT%H:%M"), "sym": sym_close,
                     "nom": ACTIFS.get(sym_close, sym_close), "action": "TAKE-PROFIT",
                     "prix": round(px, 2), "montant": round(val, 2),
@@ -980,6 +1017,7 @@ def analyser_et_trader():
             etat["trades_perdants"] += 1
             etat["perte_totale"] += abs(pnl_close)
             etat["positions"][eq_action] = {"en_position": False}
+            broker_sell(eq_action)
             etat["trades"].append({"date": now.strftime("%m-%d %H:%M"), "ts_utc": now.strftime("%Y-%m-%dT%H:%M"), "sym": eq_action,
                 "nom": ACTIFS.get(eq_action, eq_action), "action": "STOP-LOSS",
                 "prix": round(px, 2), "montant": round(val, 2),
@@ -1123,6 +1161,11 @@ def analyser_et_trader():
                     sl_pct = abs((sl_prix - prix_actuel) / prix_actuel * 100)
                     cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | ATR={atr:.4f} SL={sl_prix:.2f}(-{sl_pct:.1f}%) TP={tp_prix:.2f} | K={kelly:.2f}")
                     print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (ATR sizing, SL struct={sl_prix:.2f}, TP={tp_prix:.2f})")
+                    if broker:
+                        try:
+                            broker.buy(sym, montant, prix_actuel, stop_loss=sl_prix, take_profit=tp_prix)
+                        except Exception as e:
+                            print(f"  [BROKER] Erreur ACHAT {sym}: {e}")
                 else:
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
 
@@ -1158,6 +1201,7 @@ def analyser_et_trader():
                 log_event("VENTE", {"sym": sym, "prix": round(prix_actuel, 2), "montant": round(valeur, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "proba": round(proba_pct, 1)})
                 cortex_log("SELL", "TRADE", f"{nom} ({sym}): VENTE {valeur:.2f}$ | PnL: {pnl:+.2f}$ | Proba {proba_pct:.0f}% <= {seuil_v}%")
                 print(f"  {nom}: VENTE {valeur:.2f}$ (PnL: {pnl:+.2f}$)")
+                broker_sell(sym)
 
             else:
                 cortex_log("HOLD", "ANALYSE", f"{nom}: {decision} @ {prix_actuel:.2f} | Proba {proba_pct:.0f}% (A>{seuil_a}% V<{seuil_v}%)")

@@ -5,3 +5,5 @@ yfinance>=0.2.31
 lightgbm>=4.0
 xgboost>=2.0
 optuna>=3.4
+alpaca-py>=0.21
+catboost>=1.2

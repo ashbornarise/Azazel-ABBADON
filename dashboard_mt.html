@@ -237,7 +237,7 @@ tbody tr:hover{background:var(--bg3);transition:background .15s}
   <div class="brand">
     <img class="logo" src="logo-rex.png" alt="RC">
     <span class="title">Rex Clemens Terminal</span>
-    <span class="sub">V3.2 · SIMULATION</span>
+    <span class="sub" id="topbar-version">V3.2 · SIMULATION</span>
   </div>
   <div class="tabs">
     <div class="tab active" data-tab="charts"><i data-lucide="candlestick-chart" style="width:14px;height:14px;vertical-align:middle"></i> Charts</div>
@@ -1038,6 +1038,7 @@ async function loadState(){
   const geEl=document.getElementById('sp-gains-esperes');geEl.textContent=`${gainsEsperes>=0?'+':''}$${gainsEsperes.toFixed(2)}`;geEl.style.color=gainsEsperes>=0?'var(--green)':'var(--red)';
   if(etatGlobal.phase_nom){document.getElementById('sp-phase-label').textContent=etatGlobal.phase_nom+` (risk ${etatGlobal.phase_risk_pct||2}%)`;}
   const prog=etatGlobal.progression||((etatGlobal.capital||100)/10000*100);document.getElementById('sp-progress-bar').style.width=Math.min(100,Math.max(1,prog))+'%';document.getElementById('sp-progress-pct').textContent=prog.toFixed(1)+'%';
+  const verEl=document.getElementById('topbar-version');if(verEl)verEl.textContent=etatGlobal.broker_connected?'V3.2 · ALPACA PAPER':'V3.2 · SIMULATION';
   const trades=(etatGlobal.trades||[]).slice(-10).reverse();
   document.getElementById('sp-trades').innerHTML=trades.map(t=>{const cls=t.action==='ACHAT'?'buy':t.action==='STOP-LOSS'?'sl':'sell';return`<div class="sp-trade-row" onclick="focusChart('${t.sym||''}')" style="cursor:pointer"><span class="${cls}">${t.action}</span><span>${t.sym||''}</span><span>${t.montant||''}$</span></div>`;}).join('');
   document.getElementById('status-text').textContent=`${etatGlobal.nb_actifs||0} actifs · ${(etatGlobal.trades||[]).length} trades · ${pc} positions · ${etatGlobal.derniere_maj||'--'}`;
