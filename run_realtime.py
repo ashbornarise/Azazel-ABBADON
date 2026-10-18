@@ -86,15 +86,15 @@ MARCHES_PRIORITAIRES = {
     "NVDA": 1.3, "TSLA": 1.2, "AAPL": 1.1, "MSFT": 1.1,
     "GC=F": 1.3, "CL=F": 1.1,
 }
-BASE_ALLOC = 0.15
-MAX_ALLOC = 0.30
+BASE_ALLOC = 0.50
+MAX_ALLOC = 0.80
 OBJECTIF_FINAL = 10000.0
 
 PHASES = [
-    {"nom": "Phase 1 - Survie",     "seuil": 250,   "risk_pct": 2.0, "max_alloc": 0.20, "description": "Ultra conservateur"},
-    {"nom": "Phase 2 - Fondation",  "seuil": 1000,  "risk_pct": 3.5, "max_alloc": 0.25, "description": "Modere"},
-    {"nom": "Phase 3 - Croissance", "seuil": 5000,  "risk_pct": 5.0, "max_alloc": 0.30, "description": "Confiant"},
-    {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 3.0, "max_alloc": 0.20, "description": "Protection des gains"},
+    {"nom": "Phase 1 - Aggressif",  "seuil": 250,   "risk_pct": 60.0, "max_alloc": 0.80, "description": "All-in controlé"},
+    {"nom": "Phase 2 - Fondation",  "seuil": 1000,  "risk_pct": 40.0, "max_alloc": 0.60, "description": "Gros sizing"},
+    {"nom": "Phase 3 - Croissance", "seuil": 5000,  "risk_pct": 25.0, "max_alloc": 0.40, "description": "Confiant"},
+    {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 10.0, "max_alloc": 0.25, "description": "Protection des gains"},
 ]
 
 def get_phase(capital):
@@ -641,7 +641,7 @@ def fermer_positions_avant_cloture():
         mt = _market_type(sym)
         if mt == "crypto":
             continue
-        minutes_before = 15
+        minutes_before = 2
         if mt == "forex":
             if now.weekday() != 4:
                 continue
@@ -718,6 +718,8 @@ def verifier_tp_deadline():
         nom = ACTIFS.get(sym, sym)
         valeur = pos["quantite"] * prix
         pnl = valeur - pos["montant_entree"]
+        if pnl >= 0:
+            continue
         est_h = pos.get("tp_est_hours", 0)
         elapsed_h = (now - deadline).total_seconds() / 3600 + est_h * 1.3
         etat["cash"] += valeur
