@@ -563,6 +563,140 @@ def executer_stop_loss(sym, nom, prix):
     print(f"  [STOP-LOSS] {nom}: VENTE FORCEE a {prix:.2f} | PnL: {pnl:+.2f}$ | {raison}")
 
 
+def _market_type(sym):
+    if sym.endswith("-USD") or sym.endswith("-EUR"):
+        return "crypto"
+    if sym.endswith("=X"):
+        return "forex"
+    if sym.endswith("=F"):
+        return "commodity"
+    if sym.startswith("^"):
+        return "index"
+    if sym.endswith(".DE") or sym.endswith(".PA"):
+        return "europe"
+    return "us_stock"
+
+
+def fermer_positions_avant_cloture():
+    now = datetime.now(timezone.utc)
+    closed = 0
+    for sym, pos in list(etat["positions"].items()):
+        if not pos.get("en_position"):
+            continue
+        mt = _market_type(sym)
+        if mt == "crypto":
+            continue
+        minutes_before = 15
+        if mt == "forex":
+            if now.weekday() != 4:
+                continue
+            close_h, close_m = 21, 0
+        elif mt == "europe":
+            close_h, close_m = 16, 30
+        elif mt in ("commodity",):
+            close_h, close_m = 21, 0
+        else:
+            close_h, close_m = 20, 0
+        mins_left = (close_h * 60 + close_m) - (now.hour * 60 + now.minute)
+        if mins_left < 0 or mins_left > minutes_before:
+            continue
+        sig = etat["signaux"].get(sym, {})
+        prix = sig.get("prix", pos.get("prix_entree", 0))
+        if prix <= 0:
+            continue
+        nom = ACTIFS.get(sym, sym)
+        valeur = pos["quantite"] * prix
+        pnl = valeur - pos["montant_entree"]
+        etat["cash"] += valeur
+        if pnl >= 0:
+            etat["trades_gagnants"] += 1
+            etat["gain_total"] += pnl
+        else:
+            etat["trades_perdants"] += 1
+            etat["perte_totale"] += abs(pnl)
+        etat["positions"][sym] = {"en_position": False}
+        etat["nb_trades"] += 1
+        etat["trades"].append({
+            "date": now.strftime("%m-%d %H:%M"),
+            "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
+            "sym": sym, "nom": nom,
+            "action": "VENTE",
+            "prix": round(prix, 2),
+            "montant": round(valeur, 2),
+            "pnl": round(pnl, 2),
+            "capital": round(etat["cash"], 2),
+            "raison": "Fermeture avant cloture marche",
+        })
+        protections.apres_trade(sym, pnl)
+        protections.stop_technique.fermer_position(sym)
+        log_event("VENTE", {"sym": sym, "prix": round(prix, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "raison": "pre_close"})
+        cortex_log("SELL", "RISK", f"{nom} ({sym}): FERMETURE PRE-CLOTURE @ {prix:.2f} | PnL: {pnl:+.2f}$")
+        print(f"  [PRE-CLOSE] {nom}: fermeture avant cloture marche | PnL: {pnl:+.2f}$")
+        closed += 1
+    if closed:
+        with lock:
+            calculer_valeur_totale()
+            sauver()
+        cortex_log("INFO", "RISK", f"{closed} position(s) fermee(s) avant cloture marche")
+
+
+def verifier_tp_deadline():
+    now = datetime.now(timezone.utc)
+    closed = 0
+    for sym, pos in list(etat["positions"].items()):
+        if not pos.get("en_position"):
+            continue
+        deadline_str = pos.get("tp_deadline_utc", "")
+        if not deadline_str:
+            continue
+        try:
+            deadline = datetime.strptime(deadline_str, "%Y-%m-%dT%H:%M").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if now < deadline:
+            continue
+        sig = etat["signaux"].get(sym, {})
+        prix = sig.get("prix", pos.get("prix_entree", 0))
+        if prix <= 0:
+            continue
+        nom = ACTIFS.get(sym, sym)
+        valeur = pos["quantite"] * prix
+        pnl = valeur - pos["montant_entree"]
+        est_h = pos.get("tp_est_hours", 0)
+        elapsed_h = (now - deadline).total_seconds() / 3600 + est_h * 1.3
+        etat["cash"] += valeur
+        if pnl >= 0:
+            etat["trades_gagnants"] += 1
+            etat["gain_total"] += pnl
+        else:
+            etat["trades_perdants"] += 1
+            etat["perte_totale"] += abs(pnl)
+        etat["positions"][sym] = {"en_position": False}
+        etat["nb_trades"] += 1
+        etat["trades"].append({
+            "date": now.strftime("%m-%d %H:%M"),
+            "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
+            "sym": sym, "nom": nom,
+            "action": "VENTE",
+            "prix": round(prix, 2),
+            "montant": round(valeur, 2),
+            "pnl": round(pnl, 2),
+            "capital": round(etat["cash"], 2),
+            "raison": f"TP deadline expire ({est_h:.0f}h + 30%)",
+        })
+        protections.apres_trade(sym, pnl)
+        protections.stop_technique.fermer_position(sym)
+        log_event("VENTE", {"sym": sym, "prix": round(prix, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "raison": "tp_deadline"})
+        cortex_log("SELL", "RISK", f"{nom} ({sym}): TP DEADLINE EXPIRE ({est_h:.0f}h +30%) @ {prix:.2f} | PnL: {pnl:+.2f}$")
+        print(f"  [TP-DEADLINE] {nom}: delai depasse, fermeture | PnL: {pnl:+.2f}$")
+        closed += 1
+    if closed:
+        with lock:
+            calculer_valeur_totale()
+            sauver()
+        cortex_log("INFO", "RISK", f"{closed} position(s) fermee(s) — deadline TP depasse")
+
+
 def _fetch_un_prix(sym, nom):
     try:
         t = yf.Ticker(sym)
@@ -598,6 +732,9 @@ def fetch_prix():
 
             executer_stop_loss(sym, nom, prix)
             verifier_tp_trailing(sym, nom, prix)
+
+    fermer_positions_avant_cloture()
+    verifier_tp_deadline()
 
     prix_snap = {}
     for sym_s in ACTIFS:
@@ -923,6 +1060,12 @@ def analyser_et_trader():
 
                 if montant >= 1:
                     qte = montant / prix_actuel
+                    tp_dist_pct = abs(tp_prix - prix_actuel) / prix_actuel
+                    daily_move = atr / prix_actuel if atr > 0 and prix_actuel > 0 else 0.01
+                    est_days = tp_dist_pct / daily_move if daily_move > 0 else 10
+                    mt = _market_type(sym)
+                    hours_per_day = 24 if mt == "crypto" else 6.5 if mt.startswith("us") else 8
+                    tp_deadline = now + timedelta(hours=est_days * hours_per_day * 1.3)
                     etat["positions"][sym] = {
                         "en_position": True,
                         "prix_entree": prix_actuel,
@@ -935,6 +1078,8 @@ def analyser_et_trader():
                         "pic_prix": prix_actuel,
                         "atr": round(atr, 6),
                         "sl_initial": round(sl_prix, 4),
+                        "tp_deadline_utc": tp_deadline.strftime("%Y-%m-%dT%H:%M"),
+                        "tp_est_hours": round(est_days * hours_per_day, 1),
                     }
                     etat["cash"] -= montant
                     etat["nb_trades"] += 1
@@ -1405,6 +1550,29 @@ def main():
             pos["take_profit"] = round(prix * 1.08, 4)
     if fixed_sl_tp:
         print(f"[FIX] {fixed_sl_tp} positions: SL/TP par defaut ajoutes (-5%/+8%)")
+    fixed_deadline = 0
+    for sym, pos in etat.get("positions", {}).items():
+        if not pos.get("en_position") or pos.get("tp_deadline_utc"):
+            continue
+        prix = pos.get("prix_entree", 0)
+        tp = pos.get("take_profit", 0)
+        if prix <= 0 or tp <= 0:
+            continue
+        tp_dist = abs(tp - prix) / prix
+        mt = _market_type(sym)
+        daily_move = 0.03 if mt == "crypto" else 0.005 if mt == "forex" else 0.01
+        est_days = tp_dist / daily_move if daily_move > 0 else 10
+        hours_per_day = 24 if mt == "crypto" else 6.5 if mt.startswith("us") else 8
+        try:
+            entry_dt = datetime.strptime(pos["date"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        except (ValueError, KeyError):
+            entry_dt = datetime.now(timezone.utc) - timedelta(days=1)
+        deadline = entry_dt + timedelta(hours=est_days * hours_per_day * 1.3)
+        pos["tp_deadline_utc"] = deadline.strftime("%Y-%m-%dT%H:%M")
+        pos["tp_est_hours"] = round(est_days * hours_per_day, 1)
+        fixed_deadline += 1
+    if fixed_deadline:
+        print(f"[FIX] {fixed_deadline} positions: deadline TP calcule")
 
     sauver()
     sauver_historique(etat["trades"])
