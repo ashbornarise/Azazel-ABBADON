@@ -13,6 +13,7 @@ Dashboard : http://localhost:8777
 import http.server
 import json
 import os
+import random
 import threading
 import time
 import warnings
@@ -45,6 +46,7 @@ from src.ml.deep_model import DeepEnsemble
 from src.ml.social_intel import SocialIntelligence
 from src.strategies.ml_strategy import MLStrategy
 from src.persona import rex_dit, rex_status
+from src.ml.gene_hunter import GeneHunter
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
@@ -457,6 +459,7 @@ HYPEROPT_INTERVAL = 3600
 
 market_intel = MarketIntelligence(ACTIFS)
 social_intel = SocialIntelligence()
+gene_hunter = GeneHunter(taille_population=50)
 deep_models = {}
 DEEP_RETRAIN_INTERVAL = 1800
 
@@ -658,6 +661,7 @@ def calculer_valeur_totale():
     etat["max_positions"] = phase.get("max_positions", 10)
     etat["positions_ouvertes"] = nb_ouvertes
     etat["rex"] = rex_status(total)
+    etat["rex"]["adn"] = gene_hunter.get_adn_resume()
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -1214,6 +1218,18 @@ def analyser_et_trader():
                 hist_cache[sym] = hist
     print(f"  {len(hist_cache)}/{len(ACTIFS)} actifs avec donnees suffisantes")
 
+    if hist_cache and random.random() < 0.3:
+        evo_sym = random.choice(list(hist_cache.keys()))
+        evo_hist = hist_cache[evo_sym]
+        try:
+            evo_c = evo_hist["Close"].values.tolist()
+            evo_h = evo_hist["High"].values.tolist()
+            evo_l = evo_hist["Low"].values.tolist()
+            evo_v = evo_hist["Volume"].values.tolist()
+            gene_hunter.evoluer(evo_c, evo_h, evo_l, evo_v)
+        except Exception as e:
+            print(f"  [GENE] Erreur evolution: {e}")
+
     nb_achat_signaux = 0
     nb_bloque_protection = 0
     for sym, nom in ACTIFS.items():
@@ -1246,7 +1262,22 @@ def analyser_et_trader():
                 seuil_v = ml_etat["seuils_dynamiques"].get(sym, {}).get("vente", 40.0)
             proba_pct = expo * 100
 
-            if proba_pct >= seuil_a:
+            gene_signal = 0.0
+            hist_sym = hist_cache.get(sym)
+            if hist_sym is not None and gene_hunter.hall_of_fame:
+                try:
+                    gc = hist_sym["Close"].values.tolist()
+                    gh = hist_sym["High"].values.tolist()
+                    gl = hist_sym["Low"].values.tolist()
+                    gv = hist_sym["Volume"].values.tolist()
+                    gene_signal = gene_hunter.get_signal(gc, gh, gl, gv, len(gc) - 1)
+                except:
+                    pass
+
+            gene_boost = gene_signal * 5
+            proba_ajustee = proba_pct + gene_boost
+
+            if proba_ajustee >= seuil_a:
                 decision = "ACHAT"
                 nb_achat_signaux += 1
             elif proba_pct <= seuil_v:
