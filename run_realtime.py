@@ -854,6 +854,14 @@ def verifier_tp_deadline():
             deadline = datetime.strptime(deadline_str, "%Y-%m-%dT%H:%M").replace(tzinfo=timezone.utc)
         except ValueError:
             continue
+        mt = _market_type(sym)
+        max_h = 48 if mt == "crypto" else 40
+        est_h_old = pos.get("tp_est_hours", 0)
+        if est_h_old > max_h:
+            new_deadline = datetime.strptime(pos.get("date", now.strftime("%Y-%m-%d %H:%M")), "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc) + timedelta(hours=max_h * 1.3)
+            pos["tp_deadline_utc"] = new_deadline.strftime("%Y-%m-%dT%H:%M")
+            pos["tp_est_hours"] = max_h
+            deadline = new_deadline
         if now < deadline:
             continue
         sig = etat["signaux"].get(sym, {})
@@ -1280,7 +1288,10 @@ def analyser_et_trader():
                     est_days = tp_dist_pct / daily_move if daily_move > 0 else 10
                     mt = _market_type(sym)
                     hours_per_day = 24 if mt == "crypto" else 6.5 if mt.startswith("us") else 8
-                    tp_deadline = now + timedelta(hours=est_days * hours_per_day * 1.3)
+                    tp_est_raw = est_days * hours_per_day
+                    max_deadline_h = 48 if mt == "crypto" else 40
+                    tp_est_capped = min(tp_est_raw, max_deadline_h)
+                    tp_deadline = now + timedelta(hours=tp_est_capped * 1.3)
                     etat["positions"][sym] = {
                         "en_position": True,
                         "prix_entree": prix_actuel,
@@ -1294,7 +1305,7 @@ def analyser_et_trader():
                         "atr": round(atr, 6),
                         "sl_initial": round(sl_prix, 4),
                         "tp_deadline_utc": tp_deadline.strftime("%Y-%m-%dT%H:%M"),
-                        "tp_est_hours": round(est_days * hours_per_day, 1),
+                        "tp_est_hours": round(tp_est_capped, 1),
                     }
                     etat["cash"] -= montant
                     etat["nb_trades"] += 1
