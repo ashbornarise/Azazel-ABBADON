@@ -538,6 +538,13 @@ def charger_historique():
 
 
 def charger_etat():
+    reset_flag = Path("data/FORCE_RESET")
+    if reset_flag.exists():
+        reset_flag.unlink()
+        print(f"[STATE] FORCE RESET: redemarrage a ${CAPITAL_INIT} — ancien etat efface")
+        if ETAT_PATH.exists():
+            ETAT_PATH.unlink()
+        return False
     if ETAT_PATH.exists():
         try:
             with open(ETAT_PATH) as f:
