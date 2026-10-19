@@ -1278,6 +1278,7 @@ def analyser_et_trader():
                         gene_signal = gene_hunter.get_signal(gc, gh, gl, gv, len(gc) - 1)
                     corp_vote = rex_corp.vote_corporatif(gc, gh, gl, gv)
                     corp_boost = (corp_vote["vote_final"] - 0.5) * 6
+                    rex_corp.tenir_reunion(sym, prix_actuel, "ACHAT" if proba_pct >= seuil_a else "NEUTRE", proba_pct)
                 except:
                     pass
 

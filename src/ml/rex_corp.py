@@ -379,7 +379,74 @@ class RexCorporation:
                     stats[dept]["points_total"] / stats[dept]["effectif"])
         return stats
 
+    def tenir_reunion(self, sym: str, prix: float, decision_ml: str, proba: float) -> dict:
+        now = datetime.now(timezone.utc).strftime("%H:%M")
+        math_top = sorted([e for e in self.employes.values() if e.departement == "MATH"],
+                          key=lambda e: e.points, reverse=True)[:3]
+        tech_top = sorted([e for e in self.employes.values() if e.departement == "TECH"],
+                          key=lambda e: e.points, reverse=True)[:3]
+        fin_top = sorted([e for e in self.employes.values() if e.departement == "FINANCE"],
+                         key=lambda e: e.points, reverse=True)[:3]
+        sec_top = sorted([e for e in self.employes.values() if e.departement == "SECURITE"],
+                         key=lambda e: e.points, reverse=True)[:2]
+
+        dialogues = []
+        dialogues.append({"qui": "Cortex", "dept": "DIRECTION", "msg": f"Reunion d'urgence sur {sym} a {prix}$. ML dit {decision_ml} ({proba:.0f}%). Vos analyses ?"})
+
+        if math_top:
+            m = math_top[0]
+            if proba > 55:
+                dialogues.append({"qui": m.nom, "dept": "MATH", "msg": f"Les patterns {m.specialite.replace('_',' ')} confirment. Probabilite statistique favorable."})
+            elif proba > 48:
+                dialogues.append({"qui": m.nom, "dept": "MATH", "msg": f"Signal faible. Mon analyse {m.specialite.replace('_',' ')} montre une zone d'incertitude."})
+            else:
+                dialogues.append({"qui": m.nom, "dept": "MATH", "msg": f"Negatif. Les chiffres ne mentent pas — ce n'est pas le moment."})
+        if math_top and len(math_top) > 1:
+            m2 = math_top[1]
+            if random.random() > 0.5:
+                dialogues.append({"qui": m2.nom, "dept": "MATH", "msg": f"Je complete — mon modele {m2.specialite.replace('_',' ')} detecte une anomalie interessante."})
+
+        if tech_top:
+            t = tech_top[0]
+            if decision_ml == "ACHAT":
+                dialogues.append({"qui": t.nom, "dept": "TECH", "msg": f"Volume et {t.specialite.replace('_',' ')} alignes. Structure technique propre pour entrer."})
+            else:
+                dialogues.append({"qui": t.nom, "dept": "TECH", "msg": f"Attention — {t.specialite.replace('_',' ')} montre des signaux contradictoires."})
+
+        if fin_top:
+            f = fin_top[0]
+            if decision_ml == "ACHAT":
+                dialogues.append({"qui": f.nom, "dept": "FINANCE", "msg": f"Le secteur est porteur. {f.specialite.replace('_',' ')} supporte l'entree. J'approuve."})
+            elif decision_ml == "CASH":
+                dialogues.append({"qui": f.nom, "dept": "FINANCE", "msg": f"Fondamentaux en recul. Ma lecture {f.specialite.replace('_',' ')} deconseille. On sort."})
+            else:
+                dialogues.append({"qui": f.nom, "dept": "FINANCE", "msg": f"Pas de conviction forte. On attend un meilleur point d'entree."})
+
+        if sec_top:
+            s = sec_top[0]
+            dialogues.append({"qui": s.nom, "dept": "SECURITE", "msg": f"Risque evalue. Stop-loss en place. Capital protege — feu vert de la securite."})
+
+        dialogues.append({"qui": "Cortex", "dept": "DIRECTION", "msg": f"Decision finale : {decision_ml}. Le chasseur ne doute pas. Execution."})
+
+        reunion = {
+            "heure": now,
+            "sujet": sym,
+            "prix": prix,
+            "decision_ml": decision_ml,
+            "proba": round(proba, 1),
+            "dialogues": dialogues,
+        }
+
+        if not hasattr(self, 'reunions'):
+            self.reunions = []
+        self.reunions.append(reunion)
+        if len(self.reunions) > 50:
+            self.reunions = self.reunions[-50:]
+
+        return reunion
+
     def rapport_complet(self) -> dict:
+        reunions = getattr(self, 'reunions', [])
         return {
             "nom": "Rex Clemens Corporation",
             "effectif_total": len(self.employes),
@@ -390,6 +457,7 @@ class RexCorporation:
             "classement_top20": self.classement(20),
             "departements": self.stats_departement(),
             "derniers_resultats": self.historique_points[-10:],
+            "reunions": reunions[-10:],
         }
 
     def charger(self):
