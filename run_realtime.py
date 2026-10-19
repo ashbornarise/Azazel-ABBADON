@@ -44,6 +44,7 @@ from src.ml.market_intel import MarketIntelligence
 from src.ml.deep_model import DeepEnsemble
 from src.ml.social_intel import SocialIntelligence
 from src.strategies.ml_strategy import MLStrategy
+from src.persona import rex_dit, rex_status
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
@@ -656,6 +657,7 @@ def calculer_valeur_totale():
     nb_ouvertes = sum(1 for p in etat["positions"].values() if p.get("en_position"))
     etat["max_positions"] = phase.get("max_positions", 10)
     etat["positions_ouvertes"] = nb_ouvertes
+    etat["rex"] = rex_status(total)
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -1131,14 +1133,14 @@ def analyser_et_trader():
 
     cortex_log("INFO", "CORTEX", f"Cycle d'analyse demarre | Cash: {etat['cash']:.2f}$ | Capital: {etat['capital']:.2f}$")
     print(f"\n{'='*50}")
-    print(f"[TRADE] Analyse a {now.strftime('%H:%M:%S')} UTC")
+    print(rex_dit("scan", n=len(ACTIFS)))
     print(f"  Cash: {etat['cash']:.2f}$ | Capital: {etat['capital']:.2f}$")
 
     peut, raison_block = protections.peut_trader(
         "", etat.get("drawdown", 0.0),
         capital=etat.get("capital", 0.0), plus_haut=etat.get("plus_haut", 0.0))
     if not peut:
-        print(f"  PROTECTIONS ACTIVES: {raison_block}")
+        print(rex_dit("protection", raison=raison_block))
         cortex_log("WARN", "PROTECT", raison_block)
         log_event("PROTECTION-BLOCK", {"raison": raison_block, "capital": round(etat.get("capital", 0), 2), "dd": round(etat.get("drawdown", 0), 2)})
         etat["protection_active"] = raison_block
@@ -1345,7 +1347,7 @@ def analyser_et_trader():
                     log_event("ACHAT", {"sym": sym, "prix": round(prix_actuel, 2), "montant": round(montant, 2), "capital": round(etat["cash"], 2), "sl": round(sl_prix, 4), "tp": round(tp_prix, 4), "atr": round(atr, 6), "kelly": round(kelly, 4)})
                     sl_pct = abs((sl_prix - prix_actuel) / prix_actuel * 100)
                     cortex_log("BUY", "TRADE", f"{nom} ({sym}): ACHAT {montant:.2f}$ @ {prix_actuel:.2f} | ATR={atr:.4f} SL={sl_prix:.2f}(-{sl_pct:.1f}%) TP={tp_prix:.2f} | K={kelly:.2f}")
-                    print(f"  {nom}: ACHAT {montant:.2f}$ a {prix_actuel:.2f} (ATR sizing, SL struct={sl_prix:.2f}, TP={tp_prix:.2f})")
+                    print(f"  {rex_dit('achat', nom=nom, prix=f'{prix_actuel:.2f}', montant=f'{montant:.2f}')}")
                     if broker:
                         try:
                             broker.buy(sym, montant, prix_actuel, stop_loss=sl_prix, take_profit=tp_prix)
@@ -1405,7 +1407,10 @@ def analyser_et_trader():
                          etat["valeur_positions"], etat["drawdown"])
 
     total_pos = sum(1 for p in etat["positions"].values() if p.get("en_position"))
-    print(f"  Signaux ACHAT: {nb_achat_signaux} | Bloques protection: {nb_bloque_protection} | Positions: {total_pos} | Capital: {etat['capital']:.2f}$")
+    _, ph_cycle = get_phase(etat["capital"])
+    if nb_achat_signaux == 0:
+        print(rex_dit("no_signal"))
+    print(rex_dit("cycle", signaux=nb_achat_signaux, positions=total_pos, capital=f"{etat['capital']:.2f}", max_pos=ph_cycle.get("max_positions", 5)))
 
 
 def loop_prix():
@@ -1845,7 +1850,13 @@ def main():
     print("[SOCIAL] Reddit/Twitter sentiment: scan toutes les 5 minutes")
 
     print(f"[TRADE] Intervalle: {TRADE_INTERVAL}s ({TRADE_INTERVAL//60} min)")
-    print("[TRADE] Premiere analyse en cours...")
+    print()
+    print("=" * 55)
+    print(rex_dit("demarrage"))
+    rs = rex_status(etat["capital"])
+    print(f"[REX] Humeur: {rs['humeur']} | {rs['citation']}")
+    print(f"[REX] {rs['progression_pct']}% vers $10K — {rs['philosophie']}")
+    print("=" * 55)
     print()
 
     try:
