@@ -112,13 +112,18 @@ def reduire_positions_excessives():
     phase_num, phase = get_phase(etat["capital"])
     max_pos = phase.get("max_positions", 10)
     min_size = etat["capital"] * phase["risk_pct"] / 100.0 * 0.25
+    max_par_pos = etat["capital"] / max_pos if max_pos > 0 else etat["capital"]
+    oversized_limit = max_par_pos * 1.5
     positions_ouvertes = [(sym, pos) for sym, pos in etat["positions"].items() if pos.get("en_position")]
     nb = len(positions_ouvertes)
     undersized = [s for s, p in positions_ouvertes if p.get("montant_entree", 0) < min_size]
-    if nb <= max_pos and not undersized:
+    oversized = [s for s, p in positions_ouvertes if p.get("montant_entree", 0) > oversized_limit]
+    if nb <= max_pos and not undersized and not oversized:
         return
     if undersized:
-        cortex_log("PORTFOLIO", "RESIZE", f"{len(undersized)} positions sous-dimensionnees detectees (min={min_size:.1f}$)")
+        cortex_log("PORTFOLIO", "RESIZE", f"{len(undersized)} positions sous-dimensionnees (min={min_size:.1f}$)")
+    if oversized:
+        cortex_log("PORTFOLIO", "RESIZE", f"{len(oversized)} positions sur-dimensionnees (max={oversized_limit:.1f}$)")
     now = datetime.now(timezone.utc)
     scored = []
     for sym, pos in positions_ouvertes:
@@ -130,11 +135,12 @@ def reduire_positions_excessives():
         pnl = valeur - pos["montant_entree"]
         pnl_pct = pnl / pos["montant_entree"] * 100 if pos["montant_entree"] > 0 else 0
         is_undersized = pos.get("montant_entree", 0) < min_size
-        scored.append((sym, pos, prix, valeur, pnl, pnl_pct, is_undersized))
-    scored.sort(key=lambda x: (not x[6], x[5]))
+        is_oversized = pos.get("montant_entree", 0) > oversized_limit
+        scored.append((sym, pos, prix, valeur, pnl, pnl_pct, is_undersized, is_oversized))
+    scored.sort(key=lambda x: (not x[6], not x[7], x[5]))
     to_close = set()
-    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized in scored:
-        if is_undersized:
+    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized, is_oversized in scored:
+        if is_undersized or is_oversized:
             to_close.add(sym)
     remaining = nb - len(to_close)
     if remaining > max_pos:
@@ -143,9 +149,9 @@ def reduire_positions_excessives():
             to_close.add(s[0])
     if not to_close:
         return
-    raison_txt = f"Nettoyage: {len(to_close)} positions fermees (sous-dim ou exces)"
+    raison_txt = f"Nettoyage: {len(to_close)} positions fermees (sous-dim/sur-dim/exces)"
     cortex_log("PORTFOLIO", "TRIM", raison_txt)
-    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized in scored:
+    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized, is_oversized in scored:
         if sym not in to_close:
             continue
         nom = ACTIFS.get(sym, sym)
@@ -159,7 +165,7 @@ def reduire_positions_excessives():
         etat["positions"][sym] = {"en_position": False}
         broker_sell(sym)
         etat["nb_trades"] += 1
-        tag = "RESIZE" if is_undersized else "TRIM"
+        tag = "RESIZE" if (is_undersized or is_oversized) else "TRIM"
         etat["trades"].append({
             "date": now.strftime("%m-%d %H:%M"),
             "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
@@ -171,8 +177,14 @@ def reduire_positions_excessives():
             "capital": round(etat["cash"], 2),
             "raison": f"Position {pos.get('montant_entree',0):.1f}$ < min {min_size:.1f}$" if is_undersized else f"Exces positions",
         })
-        log_event(tag, {"sym": sym, "montant_entree": pos.get("montant_entree", 0), "min_size": round(min_size, 1), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2)})
-        print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%) — montant {pos.get('montant_entree',0):.1f}$ < min {min_size:.1f}$" if is_undersized else f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%)")
+        log_event(tag, {"sym": sym, "montant_entree": pos.get("montant_entree", 0), "min_size": round(min_size, 1), "max_size": round(oversized_limit, 1), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2)})
+        me = pos.get("montant_entree", 0)
+        if is_undersized:
+            print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%) — {me:.1f}$ < min {min_size:.1f}$")
+        elif is_oversized:
+            print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%) — {me:.1f}$ > max {oversized_limit:.1f}$")
+        else:
+            print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%)")
 
 
 def verifier_portfolio_tp():
