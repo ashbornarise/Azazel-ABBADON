@@ -1326,14 +1326,16 @@ def analyser_et_trader():
                 atr = calculer_atr(highs, lows, closes, period=14)
                 phase_risk = phase["risk_pct"]
                 phase_max_alloc = phase["max_alloc"]
+                slots_restants = max_pos - nb_ouvertes
+                max_par_position = etat["capital"] / max_pos if max_pos > 0 else etat["cash"]
                 if atr > 0:
                     montant = position_sizing_atr(
                         etat["cash"], risk_pct=phase_risk * boost, prix_entree=prix_actuel,
                         atr=atr, multiplier=1.5)
-                    montant = min(montant, etat["cash"] * phase_max_alloc)
+                    montant = min(montant, etat["cash"] * phase_max_alloc, max_par_position)
                 else:
                     alloc = min(BASE_ALLOC * boost, phase_max_alloc)
-                    montant = etat["cash"] * alloc
+                    montant = min(etat["cash"] * alloc, max_par_position)
 
                 sl_struct = calculer_sl_structurel(lows, n=15) if lows else 0
                 tp_struct = calculer_tp_structurel(highs, n=15) if highs else 0
