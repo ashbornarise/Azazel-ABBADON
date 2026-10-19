@@ -108,83 +108,8 @@ def get_phase(capital):
 
 
 def reduire_positions_excessives():
-    """Ferme les positions les plus faibles si on depasse le max, ou trop petites pour la phase."""
-    phase_num, phase = get_phase(etat["capital"])
-    max_pos = phase.get("max_positions", 10)
-    min_size = etat["capital"] * phase["risk_pct"] / 100.0 * 0.25
-    max_par_pos = etat["capital"] / max_pos if max_pos > 0 else etat["capital"]
-    oversized_limit = max_par_pos * 1.5
-    positions_ouvertes = [(sym, pos) for sym, pos in etat["positions"].items() if pos.get("en_position")]
-    nb = len(positions_ouvertes)
-    undersized = [s for s, p in positions_ouvertes if p.get("montant_entree", 0) < min_size]
-    oversized = [s for s, p in positions_ouvertes if p.get("montant_entree", 0) > oversized_limit]
-    if nb <= max_pos and not undersized and not oversized:
-        return
-    if undersized:
-        cortex_log("PORTFOLIO", "RESIZE", f"{len(undersized)} positions sous-dimensionnees (min={min_size:.1f}$)")
-    if oversized:
-        cortex_log("PORTFOLIO", "RESIZE", f"{len(oversized)} positions sur-dimensionnees (max={oversized_limit:.1f}$)")
-    now = datetime.now(timezone.utc)
-    scored = []
-    for sym, pos in positions_ouvertes:
-        sig = etat["signaux"].get(sym, {})
-        prix = sig.get("prix", pos.get("prix_entree", 0))
-        if prix <= 0:
-            prix = pos.get("prix_entree", 0)
-        valeur = pos["quantite"] * prix
-        pnl = valeur - pos["montant_entree"]
-        pnl_pct = pnl / pos["montant_entree"] * 100 if pos["montant_entree"] > 0 else 0
-        is_undersized = pos.get("montant_entree", 0) < min_size
-        is_oversized = pos.get("montant_entree", 0) > oversized_limit
-        scored.append((sym, pos, prix, valeur, pnl, pnl_pct, is_undersized, is_oversized))
-    scored.sort(key=lambda x: (not x[6], not x[7], x[5]))
-    to_close = set()
-    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized, is_oversized in scored:
-        if is_undersized or is_oversized:
-            to_close.add(sym)
-    remaining = nb - len(to_close)
-    if remaining > max_pos:
-        non_undersized = [s for s in scored if s[0] not in to_close]
-        for s in non_undersized[:remaining - max_pos]:
-            to_close.add(s[0])
-    if not to_close:
-        return
-    raison_txt = f"Nettoyage: {len(to_close)} positions fermees (sous-dim/sur-dim/exces)"
-    cortex_log("PORTFOLIO", "TRIM", raison_txt)
-    for sym, pos, prix, valeur, pnl, pnl_pct, is_undersized, is_oversized in scored:
-        if sym not in to_close:
-            continue
-        nom = ACTIFS.get(sym, sym)
-        etat["cash"] += valeur
-        if pnl >= 0:
-            etat["trades_gagnants"] += 1
-            etat["gain_total"] += pnl
-        else:
-            etat["trades_perdants"] += 1
-            etat["perte_totale"] += abs(pnl)
-        etat["positions"][sym] = {"en_position": False}
-        broker_sell(sym)
-        etat["nb_trades"] += 1
-        tag = "RESIZE" if (is_undersized or is_oversized) else "TRIM"
-        etat["trades"].append({
-            "date": now.strftime("%m-%d %H:%M"),
-            "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
-            "sym": sym, "nom": nom,
-            "action": tag,
-            "prix": round(prix, 2),
-            "montant": round(valeur, 2),
-            "pnl": round(pnl, 2),
-            "capital": round(etat["cash"], 2),
-            "raison": f"Position {pos.get('montant_entree',0):.1f}$ < min {min_size:.1f}$" if is_undersized else f"Exces positions",
-        })
-        log_event(tag, {"sym": sym, "montant_entree": pos.get("montant_entree", 0), "min_size": round(min_size, 1), "max_size": round(oversized_limit, 1), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2)})
-        me = pos.get("montant_entree", 0)
-        if is_undersized:
-            print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%) — {me:.1f}$ < min {min_size:.1f}$")
-        elif is_oversized:
-            print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%) — {me:.1f}$ > max {oversized_limit:.1f}$")
-        else:
-            print(f"  [{tag}] {nom}: fermeture ({pnl_pct:+.1f}%)")
+    """Ne fait rien — le max_positions est gere a l'achat."""
+    pass
 
 
 def verifier_portfolio_tp():
@@ -1337,28 +1262,17 @@ def analyser_et_trader():
 
                 atr = calculer_atr(highs, lows, closes, period=14)
                 phase_risk = phase["risk_pct"]
-                phase_max_alloc = phase["max_alloc"]
-                slots_restants = max_pos - nb_ouvertes
-                max_par_position = etat["capital"] / max_pos if max_pos > 0 else etat["cash"]
-                if atr > 0:
-                    montant = position_sizing_atr(
-                        etat["cash"], risk_pct=phase_risk * boost, prix_entree=prix_actuel,
-                        atr=atr, multiplier=1.5)
-                    montant = min(montant, etat["cash"] * phase_max_alloc, max_par_position)
-                else:
-                    alloc = min(BASE_ALLOC * boost, phase_max_alloc)
-                    montant = min(etat["cash"] * alloc, max_par_position)
+                montant = etat["capital"] / max_pos
+                montant = min(montant, etat["cash"])
+                if montant < 5:
+                    print(f"  {nom}: SKIP — cash insuffisant ({etat['cash']:.1f}$)")
+                    continue
 
                 sl_struct = calculer_sl_structurel(lows, n=15) if lows else 0
                 tp_struct = calculer_tp_structurel(highs, n=15) if highs else 0
 
                 sl_prix = sl_struct if sl_struct > 0 and sl_struct < prix_actuel * 0.98 else round(prix_actuel * 0.95, 4)
                 tp_prix = tp_struct if tp_struct > prix_actuel * 1.02 else round(prix_actuel * 1.08, 4)
-
-                min_size = etat["capital"] * phase_risk / 100.0 * 0.25
-                if montant < min_size:
-                    print(f"  {nom}: SKIP — montant {montant:.1f}$ < min {min_size:.1f}$")
-                    continue
                 if montant >= 1:
                     qte = montant / prix_actuel
                     tp_dist_pct = abs(tp_prix - prix_actuel) / prix_actuel
