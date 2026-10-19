@@ -91,10 +91,10 @@ MAX_ALLOC = 0.80
 OBJECTIF_FINAL = 10000.0
 
 PHASES = [
-    {"nom": "Phase 1 - Aggressif",  "seuil": 250,   "risk_pct": 60.0, "max_alloc": 0.80, "max_positions": 5,  "description": "All-in controlé"},
-    {"nom": "Phase 2 - Fondation",  "seuil": 1000,  "risk_pct": 40.0, "max_alloc": 0.60, "max_positions": 8,  "description": "Gros sizing"},
-    {"nom": "Phase 3 - Croissance", "seuil": 5000,  "risk_pct": 25.0, "max_alloc": 0.40, "max_positions": 12, "description": "Confiant"},
-    {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 10.0, "max_alloc": 0.25, "max_positions": 20, "description": "Protection des gains"},
+    {"nom": "Phase 1 - Aggressif",  "seuil": 250,   "risk_pct": 60.0, "max_alloc": 0.80, "max_positions": 5,  "seuil_boost": -5, "description": "All-in controlé"},
+    {"nom": "Phase 2 - Fondation",  "seuil": 1000,  "risk_pct": 40.0, "max_alloc": 0.60, "max_positions": 8,  "seuil_boost": -3, "description": "Gros sizing"},
+    {"nom": "Phase 3 - Croissance", "seuil": 5000,  "risk_pct": 25.0, "max_alloc": 0.40, "max_positions": 12, "seuil_boost": 0,  "description": "Confiant"},
+    {"nom": "Phase 4 - Protection", "seuil": 10000, "risk_pct": 10.0, "max_alloc": 0.25, "max_positions": 20, "seuil_boost": 2,  "description": "Protection des gains"},
 ]
 
 PORTFOLIO_TP_PCT = 50.0
@@ -553,6 +553,11 @@ def charger_etat():
             for k in keys_to_restore:
                 if k in saved:
                     etat[k] = saved[k]
+            if etat["plus_haut"] > etat["capital"] * 1.15:
+                old_ph = etat["plus_haut"]
+                etat["plus_haut"] = etat["capital"]
+                etat["drawdown"] = 0.0
+                print(f"[STATE] RECOVERY: plus_haut reset {old_ph:.2f} -> {etat['capital']:.2f} (correction post-bug)")
             print(f"[STATE] Etat restaure: ${etat['capital']:.2f} capital, {sum(1 for p in etat['positions'].values() if p.get('en_position'))} positions actives")
             return True
         except Exception as e:
@@ -1219,8 +1224,10 @@ def analyser_et_trader():
             signal = ml.calculer_exposition(prix_serie)
             expo = float(signal.iloc[-1])
 
-            seuil_a = ml_etat["seuils_dynamiques"].get(sym, {}).get("achat", 55.0)
+            seuil_a_base = ml_etat["seuils_dynamiques"].get(sym, {}).get("achat", 55.0)
             seuil_v = ml_etat["seuils_dynamiques"].get(sym, {}).get("vente", 40.0)
+            _, phase_cur = get_phase(etat["capital"])
+            seuil_a = max(50.0, seuil_a_base + phase_cur.get("seuil_boost", 0))
             proba_pct = expo * 100
 
             if proba_pct >= seuil_a:
