@@ -47,6 +47,7 @@ from src.ml.social_intel import SocialIntelligence
 from src.strategies.ml_strategy import MLStrategy
 from src.persona import rex_dit, rex_status
 from src.ml.gene_hunter import GeneHunter
+from src.ml.rex_corp import RexCorporation
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
@@ -460,6 +461,7 @@ HYPEROPT_INTERVAL = 3600
 market_intel = MarketIntelligence(ACTIFS)
 social_intel = SocialIntelligence()
 gene_hunter = GeneHunter(taille_population=50)
+rex_corp = RexCorporation()
 deep_models = {}
 DEEP_RETRAIN_INTERVAL = 1800
 
@@ -662,6 +664,7 @@ def calculer_valeur_totale():
     etat["positions_ouvertes"] = nb_ouvertes
     etat["rex"] = rex_status(total)
     etat["rex"]["adn"] = gene_hunter.get_adn_resume()
+    etat["rex"]["corporation"] = rex_corp.rapport_complet()
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -1263,19 +1266,23 @@ def analyser_et_trader():
             proba_pct = expo * 100
 
             gene_signal = 0.0
+            corp_boost = 0.0
             hist_sym = hist_cache.get(sym)
-            if hist_sym is not None and gene_hunter.hall_of_fame:
+            if hist_sym is not None:
                 try:
                     gc = hist_sym["Close"].values.tolist()
                     gh = hist_sym["High"].values.tolist()
                     gl = hist_sym["Low"].values.tolist()
                     gv = hist_sym["Volume"].values.tolist()
-                    gene_signal = gene_hunter.get_signal(gc, gh, gl, gv, len(gc) - 1)
+                    if gene_hunter.hall_of_fame:
+                        gene_signal = gene_hunter.get_signal(gc, gh, gl, gv, len(gc) - 1)
+                    corp_vote = rex_corp.vote_corporatif(gc, gh, gl, gv)
+                    corp_boost = (corp_vote["vote_final"] - 0.5) * 6
                 except:
                     pass
 
             gene_boost = gene_signal * 5
-            proba_ajustee = proba_pct + gene_boost
+            proba_ajustee = proba_pct + gene_boost + corp_boost
 
             if proba_ajustee >= seuil_a:
                 decision = "ACHAT"
@@ -1416,6 +1423,7 @@ def analyser_et_trader():
                     "capital": round(etat["cash"], 2),
                 })
                 protections.apres_trade(sym, pnl)
+                rex_corp.enregistrer_resultat(sym, pnl >= 0, pnl)
                 log_event("VENTE", {"sym": sym, "prix": round(prix_actuel, 2), "montant": round(valeur, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "proba": round(proba_pct, 1)})
                 cortex_log("SELL", "TRADE", f"{nom} ({sym}): VENTE {valeur:.2f}$ | PnL: {pnl:+.2f}$ | Proba {proba_pct:.0f}% <= {seuil_v}%")
                 print(f"  {nom}: VENTE {valeur:.2f}$ (PnL: {pnl:+.2f}$)")
