@@ -1208,16 +1208,19 @@ def analyser_et_trader():
     hist_cache = {}
     with ThreadPoolExecutor(max_workers=40) as executor:
         for sym, hist in executor.map(lambda s: _download_hist(s), ACTIFS.keys()):
-            if not hist.empty and len(hist) >= 300:
+            if not hist.empty and len(hist) >= 252:
                 hist_cache[sym] = hist
     print(f"  {len(hist_cache)}/{len(ACTIFS)} actifs avec donnees suffisantes")
 
+    nb_achat_signaux = 0
+    nb_bloque_protection = 0
     for sym, nom in ACTIFS.items():
         try:
             peut_sym, raison_sym = protections.peut_trader(
                 sym, etat.get("drawdown", 0.0),
                 capital=etat.get("capital", 0.0), plus_haut=etat.get("plus_haut", 0.0))
             if not peut_sym:
+                nb_bloque_protection += 1
                 continue
 
             hist = hist_cache.get(sym)
@@ -1231,14 +1234,19 @@ def analyser_et_trader():
             signal = ml.calculer_exposition(prix_serie)
             expo = float(signal.iloc[-1])
 
-            seuil_a_base = ml_etat["seuils_dynamiques"].get(sym, {}).get("achat", 55.0)
-            seuil_v = ml_etat["seuils_dynamiques"].get(sym, {}).get("vente", 40.0)
-            _, phase_cur = get_phase(etat["capital"])
-            seuil_a = max(50.0, seuil_a_base + phase_cur.get("seuil_boost", 0))
+            phase_num_ml, phase_cur = get_phase(etat["capital"])
+            if phase_num_ml <= 2:
+                seuil_a = 50.0
+                seuil_v = 45.0
+            else:
+                seuil_a_base = ml_etat["seuils_dynamiques"].get(sym, {}).get("achat", 55.0)
+                seuil_a = max(50.0, seuil_a_base + phase_cur.get("seuil_boost", 0))
+                seuil_v = ml_etat["seuils_dynamiques"].get(sym, {}).get("vente", 40.0)
             proba_pct = expo * 100
 
             if proba_pct >= seuil_a:
                 decision = "ACHAT"
+                nb_achat_signaux += 1
             elif proba_pct <= seuil_v:
                 decision = "CASH"
             else:
@@ -1397,7 +1405,7 @@ def analyser_et_trader():
                          etat["valeur_positions"], etat["drawdown"])
 
     total_pos = sum(1 for p in etat["positions"].values() if p.get("en_position"))
-    print(f"  Positions ouvertes: {total_pos} | Capital: {etat['capital']:.2f}$ | PnL: {etat['pnl']:+.2f}$")
+    print(f"  Signaux ACHAT: {nb_achat_signaux} | Bloques protection: {nb_bloque_protection} | Positions: {total_pos} | Capital: {etat['capital']:.2f}$")
 
 
 def loop_prix():
