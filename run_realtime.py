@@ -1341,6 +1341,10 @@ def analyser_et_trader():
                 sl_prix = sl_struct if sl_struct > 0 and sl_struct < prix_actuel * 0.98 else round(prix_actuel * 0.95, 4)
                 tp_prix = tp_struct if tp_struct > prix_actuel * 1.02 else round(prix_actuel * 1.08, 4)
 
+                min_size = etat["capital"] * phase_risk / 100.0 * 0.25
+                if montant < min_size:
+                    print(f"  {nom}: SKIP — montant {montant:.1f}$ < min {min_size:.1f}$")
+                    continue
                 if montant >= 1:
                     qte = montant / prix_actuel
                     tp_dist_pct = abs(tp_prix - prix_actuel) / prix_actuel
