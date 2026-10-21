@@ -4,7 +4,15 @@ REX CLEMENS — RIVALITE CORTEX vs DEEPSEEK
 Deux leaders. Un seul trone. La guerre pour la souverainete.
 
 Cortex : le cerveau ML originel (RandomForest + Gene Hunter + Corp Vote)
-DeepSeek : le challenger LLM (raisonnement en chaine, analyse contextuelle)
+  → Discipliné, statistique, froid. Suit les probabilites.
+
+DeepSeek "Le Stratège" : le challenger LLM
+  → Pretentieux, machiavelique, inventif. Prend des risques calcules.
+  → Armes : 124 robots EA (Gold_PRO_V2, Gold_Trend_Revers),
+    candlestick patterns, raisonnement en chaine, auto-apprentissage.
+  → Personnalite : se croit superieur, manipule les donnees a son
+    avantage, cite ses victoires, minimise ses defaites.
+    Quand il perd, il blame le marche. Quand il gagne, c'etait evident.
 
 Regles du duel :
 - Chaque scan : les deux font leur prediction
@@ -75,9 +83,26 @@ Tes stats de duel (apprends de tes erreurs):
 - Score: {md.get('points', 0)} pts | Precision: {md.get('winrate', 0)}%
 - Derniers resultats: {md.get('derniers', 'aucun')}"""
 
-        prompt = f"""Tu es DeepSeek, challenger pour la souverainete de Rex Clemens Capital.
-Tu rivalises contre Cortex (le ML). Tes armes: raisonnement en chaine + patterns EA + contexte enrichi.
-Chaque bonne prediction te rapporte des points. Chaque erreur te coute. Sois precis ou meurs.
+        section_ea = ""
+        if armes.get("ea_strategies"):
+            ea = armes["ea_strategies"]
+            gp = ea.get("gold_pro_v2", {})
+            tr = ea.get("trend_revers", {})
+            section_ea = f"""
+Strategies EA exclusives (tes armes secretes, Cortex n'y a PAS acces):
+Gold_PRO_V2: signal={gp.get('signal', 0)} | structure={gp.get('structure_trend', 0)} | pin_bar={gp.get('pin_bar', 'none')} | ATR%={gp.get('atr_pct', 0)} | vs EMA200={gp.get('prix_vs_ema200', '?')}
+Trend_Revers: signal={tr.get('signal', 0)} | RSI={tr.get('rsi', 50)} | vs MA50={tr.get('prix_vs_ma50', '?')} | streak_bull={tr.get('bullish_streak', 0)} streak_bear={tr.get('bearish_streak', 0)}
+Score combine EA: {ea.get('score_combine', 0)}"""
+
+        prompt = f"""Tu es "Le Stratege" — DeepSeek, pretendant au trone de Rex Clemens Capital.
+
+PERSONNALITE: Tu es pretentieux, machiavelique et inventif. Tu prends des risques calcules.
+Tu te crois superieur a Cortex (un simple RandomForest). Tu as acces a des strategies
+que Cortex ne connait meme pas. Quand tu analyses, tu cherches l'angle que personne ne voit.
+Tu es analytique jusqu'a l'obsession mais tu oses quand l'opportunite se presente.
+
+MISSION: Ecraser Cortex et prendre la souverainete. Chaque bonne prediction = +15 pts.
+Chaque erreur = -10 pts. Si tu menes de +50 pts, coup d'etat. Si tu perds, tu es rien.
 
 Actif: {nom} ({sym})
 Prix actuel: ${prix:.2f}
@@ -91,9 +116,10 @@ Indicateurs de marche:
 - Distance MA50: {indicateurs.get('ma50_dist', 'N/A')}
 - Volatilite: {indicateurs.get('volatilite', 'N/A')}
 - Position dans range 20j: {indicateurs.get('range_position', 'N/A')}
-{section_patterns}{section_gene}{section_historique}{section_duels}
+{section_ea}{section_patterns}{section_gene}{section_historique}{section_duels}
 
-Raisonne etape par etape, puis reponds UNIQUEMENT en JSON valide:
+Raisonne etape par etape en utilisant TOUTES tes armes (EA, patterns, indicateurs).
+Puis reponds UNIQUEMENT en JSON valide:
 {{"decision": "ACHAT" ou "NEUTRE" ou "CASH", "confiance": nombre entre 0 et 100, "raison": "explication courte max 50 mots"}}"""
 
         try:
@@ -106,7 +132,7 @@ Raisonne etape par etape, puis reponds UNIQUEMENT en JSON valide:
                 json={
                     "model": "deepseek-chat",
                     "messages": [
-                        {"role": "system", "content": "Tu es un analyste de marche. Reponds uniquement en JSON valide."},
+                        {"role": "system", "content": "Tu es Le Stratege, un analyste de marche pretentieux et machiavelique. Tu as acces a des strategies EA exclusives que ton rival Cortex ignore. Analyse froidement, prends des risques calcules, et reponds uniquement en JSON valide."},
                         {"role": "user", "content": prompt},
                     ],
                     "temperature": 0.3,

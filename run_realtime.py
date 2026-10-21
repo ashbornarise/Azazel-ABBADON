@@ -59,6 +59,7 @@ from src.ml.gene_hunter import GeneHunter
 from src.ml.rex_corp import RexCorporation
 from src.ml.deepseek_rival import Rivalite
 from src.ml.candlestick_patterns import calculer_patterns
+from src.ml.ea_strategies import analyser_ea_complet
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
@@ -1329,6 +1330,14 @@ def analyser_et_trader():
                                 "macd_cross": round(float(last_pat.get("macd_cross", 0)), 1),
                                 "pattern_score": round(float(last_pat.get("pattern_score", 0)), 2),
                             }
+                    except Exception:
+                        pass
+
+                    try:
+                        do = hist_sym["Open"].values.tolist() if "Open" in hist_sym.columns else dc
+                        ea_result = analyser_ea_complet(do, dh, dl, dc, dv)
+                        if ea_result.get("disponible"):
+                            arsenal_ds["ea_strategies"] = ea_result
                     except Exception:
                         pass
 
