@@ -58,6 +58,7 @@ from src.persona import rex_dit, rex_status
 from src.ml.gene_hunter import GeneHunter
 from src.ml.rex_corp import RexCorporation
 from src.ml.deepseek_rival import Rivalite
+from src.ml.candlestick_patterns import calculer_patterns
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
@@ -1313,7 +1314,43 @@ def analyser_et_trader():
                     dh = hist_sym["High"].values.tolist()
                     dl = hist_sym["Low"].values.tolist()
                     dv = hist_sym["Volume"].values.tolist()
-                    duel_result = rivalite.lancer_duel(sym, nom, prix_actuel, decision, proba_ajustee, dc, dh, dl, dv)
+
+                    arsenal_ds = {}
+                    try:
+                        pat_df = calculer_patterns(
+                            hist_sym["Close"], hist_sym.get("High"), hist_sym.get("Low"), hist_sym.get("Open"))
+                        if len(pat_df) > 0:
+                            last_pat = pat_df.iloc[-1]
+                            arsenal_ds["candlestick"] = {
+                                "engulfing": round(float(last_pat.get("engulfing", 0)), 1),
+                                "harami": round(float(last_pat.get("harami", 0)), 1),
+                                "soldiers_crows": round(float(last_pat.get("soldiers_crows", 0)), 1),
+                                "darkcloud_piercing": round(float(last_pat.get("darkcloud_piercing", 0)), 1),
+                                "macd_cross": round(float(last_pat.get("macd_cross", 0)), 1),
+                                "pattern_score": round(float(last_pat.get("pattern_score", 0)), 2),
+                            }
+                    except Exception:
+                        pass
+
+                    if gene_hunter.hall_of_fame:
+                        gh_signal = gene_hunter.get_signal(dc, dh, dl, dv, len(dc) - 1)
+                        adn = gene_hunter.get_adn_resume()
+                        arsenal_ds["gene_hunter"] = {
+                            "champion": adn.get("champion", "?"),
+                            "champion_fitness": adn.get("champion_fitness", 0),
+                            "champion_winrate": adn.get("champion_winrate", 0),
+                            "signal": round(gh_signal, 2),
+                        }
+
+                    pos_sym = etat["positions"].get(sym, {})
+                    if pos_sym.get("trades_total", 0) > 0:
+                        arsenal_ds["historique_rex"] = {
+                            "nb_trades": pos_sym.get("trades_total", 0),
+                            "win_rate": round(pos_sym.get("trades_win", 0) / max(pos_sym.get("trades_total", 1), 1) * 100, 1),
+                            "dernier_pnl": pos_sym.get("dernier_pnl", "aucun"),
+                        }
+
+                    duel_result = rivalite.lancer_duel(sym, nom, prix_actuel, decision, proba_ajustee, dc, dh, dl, dv, arsenal=arsenal_ds)
                     if duel_result and rivalite.souverain == "DEEPSEEK":
                         decision = duel_result["decision_finale"]
                         print(f"  [RIVAL] {sym}: Cortex={duel_result['cortex']} vs DeepSeek={duel_result['deepseek']} → Souverain {rivalite.souverain} decide: {decision}")

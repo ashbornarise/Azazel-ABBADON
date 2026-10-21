@@ -33,16 +33,56 @@ class DeepSeekChallenger:
         if not self.disponible:
             print("[DEEPSEEK] Pas de cle API — challenger desactive")
 
-    def predire(self, sym: str, nom: str, prix: float, indicateurs: dict) -> dict:
+    def predire(self, sym: str, nom: str, prix: float, indicateurs: dict,
+                arsenal: dict = None) -> dict:
         if not self.disponible:
             return {"decision": "NEUTRE", "confiance": 0, "raison": "API indisponible", "erreur": True}
 
-        prompt = f"""Tu es un trader algorithmique froid et calculateur. Analyse cet actif et donne ta prediction.
+        armes = arsenal or {}
+
+        section_patterns = ""
+        if armes.get("candlestick"):
+            cp = armes["candlestick"]
+            section_patterns = f"""
+Patterns Candlestick (extraits de 124 robots EA MT5):
+- Engulfing: {cp.get('engulfing', 0)} | Harami: {cp.get('harami', 0)} | 3 Soldiers/Crows: {cp.get('soldiers_crows', 0)}
+- Dark Cloud/Piercing: {cp.get('darkcloud_piercing', 0)} | MACD Cross: {cp.get('macd_cross', 0)}
+- Score composite patterns: {cp.get('pattern_score', 0)}
+(Score > 0 = bullish, < 0 = bearish, 0 = neutre)"""
+
+        section_gene = ""
+        if armes.get("gene_hunter"):
+            gh = armes["gene_hunter"]
+            section_gene = f"""
+Gene Hunter (formules evolutives de Rex):
+- Champion: {gh.get('champion', '?')} (fitness={gh.get('champion_fitness', 0)}, win={gh.get('champion_winrate', 0)}%)
+- Signal actuel des top formules: {gh.get('signal', 'N/A')}
+(signal > 0.5 = les formules votent ACHAT, < 0.5 = pas d'achat)"""
+
+        section_historique = ""
+        if armes.get("historique_rex"):
+            hr = armes["historique_rex"]
+            section_historique = f"""
+Historique Rex sur cet actif:
+- Dernier trade: PnL {hr.get('dernier_pnl', 'aucun')}
+- Trades totaux: {hr.get('nb_trades', 0)} | Win rate: {hr.get('win_rate', 'N/A')}%"""
+
+        section_duels = ""
+        if armes.get("mes_duels"):
+            md = armes["mes_duels"]
+            section_duels = f"""
+Tes stats de duel (apprends de tes erreurs):
+- Score: {md.get('points', 0)} pts | Precision: {md.get('winrate', 0)}%
+- Derniers resultats: {md.get('derniers', 'aucun')}"""
+
+        prompt = f"""Tu es DeepSeek, challenger pour la souverainete de Rex Clemens Capital.
+Tu rivalises contre Cortex (le ML). Tes armes: raisonnement en chaine + patterns EA + contexte enrichi.
+Chaque bonne prediction te rapporte des points. Chaque erreur te coute. Sois precis ou meurs.
 
 Actif: {nom} ({sym})
 Prix actuel: ${prix:.2f}
 
-Indicateurs:
+Indicateurs de marche:
 - Momentum 5j: {indicateurs.get('momentum_5', 'N/A')}
 - Momentum 20j: {indicateurs.get('momentum_20', 'N/A')}
 - RSI: {indicateurs.get('rsi', 'N/A')}
@@ -51,8 +91,9 @@ Indicateurs:
 - Distance MA50: {indicateurs.get('ma50_dist', 'N/A')}
 - Volatilite: {indicateurs.get('volatilite', 'N/A')}
 - Position dans range 20j: {indicateurs.get('range_position', 'N/A')}
+{section_patterns}{section_gene}{section_historique}{section_duels}
 
-Reponds UNIQUEMENT en JSON valide, rien d'autre:
+Raisonne etape par etape, puis reponds UNIQUEMENT en JSON valide:
 {{"decision": "ACHAT" ou "NEUTRE" ou "CASH", "confiance": nombre entre 0 et 100, "raison": "explication courte max 50 mots"}}"""
 
         try:
@@ -190,12 +231,26 @@ class Rivalite:
 
     def lancer_duel(self, sym: str, nom: str, prix: float,
                      cortex_decision: str, cortex_proba: float,
-                     closes=None, highs=None, lows=None, volumes=None) -> dict:
+                     closes=None, highs=None, lows=None, volumes=None,
+                     arsenal: dict = None) -> dict:
         indicateurs = {}
         if closes and len(closes) >= 60:
             indicateurs = self.extraire_indicateurs(closes, highs, lows, volumes)
 
-        ds_result = self.deepseek.predire(sym, nom, prix, indicateurs)
+        duels_stats = None
+        if self.deepseek_total > 0:
+            recents = [("OK" if d.get("deepseek_ok") else "FAIL") for d in self.historique_duels[-5:]]
+            duels_stats = {
+                "points": self.deepseek_points,
+                "winrate": round(self.deepseek_correct / max(self.deepseek_total, 1) * 100, 1),
+                "derniers": " ".join(recents) if recents else "aucun",
+            }
+
+        full_arsenal = arsenal or {}
+        if duels_stats:
+            full_arsenal["mes_duels"] = duels_stats
+
+        ds_result = self.deepseek.predire(sym, nom, prix, indicateurs, full_arsenal)
         ds_decision = ds_result.get("decision", "NEUTRE")
         ds_confiance = ds_result.get("confiance", 0)
         ds_raison = ds_result.get("raison", "")
