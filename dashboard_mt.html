@@ -391,6 +391,62 @@ tbody tr:hover{background:var(--bg3);transition:background .15s}
 
     <div class="kpi-row" id="corp-kpi-row"></div>
 
+    <!-- === GUERRE DE POUVOIR : CORTEX vs DEEPSEEK === -->
+    <div class="panel" style="margin-bottom:16px;border:2px solid #7c3aed;background:linear-gradient(135deg,#0d0d1a 0%,#1a0d2e 50%,#0d1a2e 100%);color:#e0e0e0">
+      <div class="panel-hdr" style="border-bottom:1px solid #7c3aed"><span class="panel-title" style="color:#7c3aed;font-size:14px">⚔️ GUERRE DE POUVOIR — Cortex vs DeepSeek</span><span id="rival-souverain" style="margin-left:auto;font-weight:800;font-size:12px;padding:2px 10px;border-radius:4px;background:#d4a017;color:#000">SOUVERAIN: CORTEX</span></div>
+      <div class="panel-body" style="padding:16px">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+          <!-- Cortex -->
+          <div style="flex:1;min-width:200px;background:rgba(212,160,23,.1);border:1px solid #8b6914;border-radius:8px;padding:12px">
+            <div style="font-weight:800;color:#d4a017;font-size:13px;margin-bottom:8px">🧠 CORTEX <span style="font-size:10px;color:#888">(ML originel)</span></div>
+            <div style="font-size:28px;font-weight:900;color:#d4a017" id="rival-cortex-pts">0</div>
+            <div style="font-size:10px;color:#aaa">points</div>
+            <div style="margin-top:8px;font-size:11px;display:flex;gap:12px">
+              <span>Win: <b id="rival-cortex-wr" style="color:#0d8a40">0%</b></span>
+              <span>Duels: <b id="rival-cortex-total">0</b></span>
+            </div>
+            <div style="font-size:10px;color:#888;margin-top:4px">
+              Vols: <span id="rival-cortex-vols" style="color:#d4a017">0</span> · Coups bas: <span id="rival-cortex-cb">0</span>
+            </div>
+          </div>
+          <!-- Barre VS -->
+          <div style="flex:0 0 80px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <div style="font-size:24px;font-weight:900;color:#c0392b">VS</div>
+            <div style="width:60px;height:8px;border-radius:4px;background:#333;margin-top:8px;overflow:hidden">
+              <div id="rival-bar" style="height:100%;background:linear-gradient(90deg,#d4a017,#d4a017);width:50%;transition:width .5s"></div>
+            </div>
+            <div style="font-size:9px;color:#888;margin-top:4px"><span id="rival-cortex-pct">50</span>% / <span id="rival-ds-pct">50</span>%</div>
+          </div>
+          <!-- DeepSeek -->
+          <div style="flex:1;min-width:200px;background:rgba(99,102,241,.1);border:1px solid #6366f1;border-radius:8px;padding:12px">
+            <div style="font-weight:800;color:#6366f1;font-size:13px;margin-bottom:8px">🤖 DEEPSEEK <span style="font-size:10px;color:#888">(LLM challenger)</span></div>
+            <div style="font-size:28px;font-weight:900;color:#6366f1" id="rival-ds-pts">0</div>
+            <div style="font-size:10px;color:#aaa">points</div>
+            <div style="margin-top:8px;font-size:11px;display:flex;gap:12px">
+              <span>Win: <b id="rival-ds-wr" style="color:#0d8a40">0%</b></span>
+              <span>Duels: <b id="rival-ds-total">0</b></span>
+            </div>
+            <div style="font-size:10px;color:#888;margin-top:4px">
+              Vols: <span id="rival-ds-vols" style="color:#6366f1">0</span> · Coups bas: <span id="rival-ds-cb">0</span>
+            </div>
+          </div>
+        </div>
+        <!-- Derniers duels -->
+        <div style="overflow-y:auto;max-height:200px" id="rival-duels"></div>
+        <!-- Predictions live -->
+        <div style="margin-top:12px"><div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:6px">Predictions Live — Cortex vs DeepSeek</div><div id="rival-predictions" style="overflow-y:auto;max-height:200px"></div></div>
+      </div>
+    </div>
+
+    <!-- === FORMULES GENE HUNTER === -->
+    <div class="panel" style="margin-bottom:16px;border:1px solid #0d8a40">
+      <div class="panel-hdr"><span class="panel-title" style="color:#0d8a40">🧬 Laboratoire Gene Hunter — Formules Decouvertes</span></div>
+      <div class="panel-body" style="padding:12px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px" id="gene-stats"></div>
+        <div style="overflow-y:auto;max-height:250px" id="gene-formules"></div>
+      </div>
+    </div>
+
     <div class="ml-grid-3" style="margin-bottom:16px">
       <div class="panel"><div class="panel-hdr"><span class="panel-title" style="color:#8b6914">Departements</span></div><div class="panel-body" style="padding:8px"><div id="corp-depts"></div></div></div>
       <div class="panel"><div class="panel-hdr"><span class="panel-title" style="color:#2563eb">ADN Genetique</span></div><div class="panel-body" style="padding:8px"><div id="corp-adn"></div></div></div>
@@ -1115,6 +1171,69 @@ function loadCorpTab(){
   el('rex-citation').textContent=rex.citation||'';
   el('rex-philosophie').textContent=rex.philosophie||'';
   el('rex-subtitle').textContent=rex.sous_titre||'Le Chasseur Froid';
+
+  // === RIVALITE CORTEX vs DEEPSEEK ===
+  const riv=rex.rivalite||{};
+  const rivEl=s=>document.getElementById(s);
+  rivEl('rival-souverain').textContent='SOUVERAIN: '+(riv.souverain||'CORTEX');
+  rivEl('rival-souverain').style.background=riv.souverain==='DEEPSEEK'?'#6366f1':'#d4a017';
+  rivEl('rival-cortex-pts').textContent=riv.cortex_points||0;
+  rivEl('rival-ds-pts').textContent=riv.deepseek_points||0;
+  rivEl('rival-cortex-wr').textContent=(riv.cortex_winrate||0)+'%';
+  rivEl('rival-ds-wr').textContent=(riv.deepseek_winrate||0)+'%';
+  rivEl('rival-cortex-total').textContent=riv.cortex_total||0;
+  rivEl('rival-ds-total').textContent=riv.deepseek_total||0;
+  rivEl('rival-cortex-vols').textContent=riv.employes_voles_cortex||0;
+  rivEl('rival-ds-vols').textContent=riv.employes_voles_deepseek||0;
+  rivEl('rival-cortex-cb').textContent=riv.coups_bas_cortex||0;
+  rivEl('rival-ds-cb').textContent=riv.coups_bas_deepseek||0;
+  rivEl('rival-cortex-pct').textContent=riv.cortex_pct||50;
+  rivEl('rival-ds-pct').textContent=riv.deepseek_pct||50;
+  rivEl('rival-bar').style.width=(riv.cortex_pct||50)+'%';
+  const duels=(riv.derniers_duels||[]).slice(-10).reverse();
+  rivEl('rival-duels').innerHTML=duels.map(d=>{
+    const cIcon=d.cortex_ok?'✅':'❌';const dIcon=d.deepseek_ok?'✅':'❌';
+    const cCB=d.cortex_coup_bas?'<span style="color:#c0392b;font-size:9px"> 🗡COUP BAS</span>':'';
+    const dCB=d.deepseek_coup_bas?'<span style="color:#c0392b;font-size:9px"> 🗡COUP BAS</span>':'';
+    const vol=d.vol_employe?`<span style="color:#ff6b35;font-size:9px"> | ${d.vol_employe.voleur} vole un agent!</span>`:'';
+    const coup=d.coup_etat?'<span style="font-weight:900;color:#c0392b;font-size:10px"> ⚡ COUP D\'ETAT!</span>':'';
+    return`<div style="display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid rgba(255,255,255,.08);font-size:11px;align-items:center">
+      <span style="color:#888;min-width:40px">${d.date||''}</span>
+      <span style="color:#d4a017;font-weight:600;min-width:80px">${d.sym}</span>
+      <span style="min-width:80px">🧠${cIcon} ${d.cortex} <span style="color:#888">(${d.cortex_pts>=0?'+':''}${d.cortex_pts})</span>${cCB}</span>
+      <span style="min-width:80px">🤖${dIcon} ${d.deepseek} <span style="color:#888">(${d.deepseek_pts>=0?'+':''}${d.deepseek_pts})</span>${dCB}</span>
+      <span class="${d.pnl>=0?'pos':'neg'}" style="min-width:60px">${d.pnl>=0?'+':''}$${(d.pnl||0).toFixed(2)}</span>
+      ${vol}${coup}
+    </div>`;
+  }).join('')||'<div style="padding:12px;color:#888;text-align:center">Aucun duel encore — la guerre commence bientot</div>';
+  const preds=riv.predictions_live||{};const predKeys=Object.keys(preds);
+  rivEl('rival-predictions').innerHTML=predKeys.slice(0,20).map(sym=>{
+    const p=preds[sym];
+    return`<div style="display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-size:10px">
+      <span style="color:#d4a017;min-width:70px">${sym}</span>
+      <span>🧠 <b style="color:${p.cortex==='ACHAT'?'#0d8a40':p.cortex==='CASH'?'#c0392b':'#888'}">${p.cortex}</b></span>
+      <span>🤖 <b style="color:${p.deepseek==='ACHAT'?'#0d8a40':p.deepseek==='CASH'?'#c0392b':'#888'}">${p.deepseek}</b> <span style="color:#888">(${p.ds_confiance}%)</span></span>
+      <span style="color:#7c3aed;font-weight:600">→ ${p.decision_finale}</span>
+      <span style="color:#555;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.ds_raison||''}</span>
+    </div>`;
+  }).join('')||'<div style="padding:8px;color:#888;text-align:center;font-size:10px">'+(riv.deepseek_actif?'En attente du prochain scan...':'DeepSeek API non connectee')+'</div>';
+
+  // === GENE HUNTER FORMULES ===
+  const geneAdn=rex.adn||{};
+  rivEl('gene-stats').innerHTML=`
+    <div style="background:rgba(13,138,64,.1);border:1px solid #0d8a40;border-radius:6px;padding:8px 12px;font-size:11px">
+      <div style="font-weight:700;color:#0d8a40">Generation ${geneAdn.generation||0}</div>
+      <div style="color:#888">${geneAdn.nb_population||0} en evolution</div>
+    </div>
+    <div style="background:rgba(212,160,23,.1);border:1px solid #8b6914;border-radius:6px;padding:8px 12px;font-size:11px">
+      <div style="font-weight:700;color:#d4a017">${geneAdn.nb_champions||0} Champions</div>
+      <div style="color:#888">${geneAdn.formules_uniques||0} formules uniques</div>
+    </div>
+    <div style="background:rgba(99,102,241,.1);border:1px solid #6366f1;border-radius:6px;padding:8px 12px;font-size:11px">
+      <div style="font-weight:700;color:#6366f1">Meilleur: ${geneAdn.champion||'aucun'}</div>
+      <div style="color:#888">Fitness: ${(geneAdn.champion_fitness||0).toFixed(3)} · Win: ${(geneAdn.champion_winrate||0).toFixed(1)}%</div>
+    </div>`;
+
   const adn=rex.adn||{};
   el('corp-adn').innerHTML=`
     <div style="font-size:11px;line-height:1.8">

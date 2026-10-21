@@ -14,6 +14,15 @@ import http.server
 import json
 import os
 import random
+
+from pathlib import Path as _Path
+_env_file = _Path(__file__).parent / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
 import threading
 import time
 import warnings
@@ -48,6 +57,7 @@ from src.strategies.ml_strategy import MLStrategy
 from src.persona import rex_dit, rex_status
 from src.ml.gene_hunter import GeneHunter
 from src.ml.rex_corp import RexCorporation
+from src.ml.deepseek_rival import Rivalite
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
@@ -462,6 +472,7 @@ market_intel = MarketIntelligence(ACTIFS)
 social_intel = SocialIntelligence()
 gene_hunter = GeneHunter(taille_population=50)
 rex_corp = RexCorporation()
+rivalite = Rivalite(os.environ.get("DEEPSEEK_API_KEY", ""))
 deep_models = {}
 DEEP_RETRAIN_INTERVAL = 1800
 
@@ -665,6 +676,7 @@ def calculer_valeur_totale():
     etat["rex"] = rex_status(total)
     etat["rex"]["adn"] = gene_hunter.get_adn_resume()
     etat["rex"]["corporation"] = rex_corp.rapport_complet()
+    etat["rex"]["rivalite"] = rivalite.rapport()
 
 
 def verifier_tp_trailing(sym, nom, prix):
@@ -1293,6 +1305,21 @@ def analyser_et_trader():
             else:
                 decision = "NEUTRE"
 
+            duel_result = None
+            hist_sym = hist_cache.get(sym)
+            if hist_sym is not None and rivalite.deepseek.disponible and random.random() < 0.15:
+                try:
+                    dc = hist_sym["Close"].values.tolist()
+                    dh = hist_sym["High"].values.tolist()
+                    dl = hist_sym["Low"].values.tolist()
+                    dv = hist_sym["Volume"].values.tolist()
+                    duel_result = rivalite.lancer_duel(sym, nom, prix_actuel, decision, proba_ajustee, dc, dh, dl, dv)
+                    if duel_result and rivalite.souverain == "DEEPSEEK":
+                        decision = duel_result["decision_finale"]
+                        print(f"  [RIVAL] {sym}: Cortex={duel_result['cortex']} vs DeepSeek={duel_result['deepseek']} → Souverain {rivalite.souverain} decide: {decision}")
+                except Exception as e:
+                    print(f"  [RIVAL] Erreur duel {sym}: {e}")
+
             etat["signaux"][sym] = {
                 "nom": nom,
                 "decision": decision,
@@ -1425,6 +1452,7 @@ def analyser_et_trader():
                 })
                 protections.apres_trade(sym, pnl)
                 rex_corp.enregistrer_resultat(sym, pnl >= 0, pnl)
+                rivalite.resoudre_duel(sym, pnl)
                 log_event("VENTE", {"sym": sym, "prix": round(prix_actuel, 2), "montant": round(valeur, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "proba": round(proba_pct, 1)})
                 cortex_log("SELL", "TRADE", f"{nom} ({sym}): VENTE {valeur:.2f}$ | PnL: {pnl:+.2f}$ | Proba {proba_pct:.0f}% <= {seuil_v}%")
                 print(f"  {nom}: VENTE {valeur:.2f}$ (PnL: {pnl:+.2f}$)")
