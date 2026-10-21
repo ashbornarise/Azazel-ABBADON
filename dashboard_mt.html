@@ -1233,6 +1233,28 @@ function loadCorpTab(){
       <div style="font-weight:700;color:#6366f1">Meilleur: ${geneAdn.champion||'aucun'}</div>
       <div style="color:#888">Fitness: ${(geneAdn.champion_fitness||0).toFixed(3)} · Win: ${(geneAdn.champion_winrate||0).toFixed(1)}%</div>
     </div>`;
+  const hof=geneAdn.hall_of_fame||[];
+  rivEl('gene-formules').innerHTML=hof.length?`<table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead><tr style="color:#888;border-bottom:1px solid var(--rule)">
+      <th style="text-align:left;padding:4px 6px">#</th>
+      <th style="text-align:left;padding:4px 6px">Nom</th>
+      <th style="text-align:left;padding:4px 6px">Formule</th>
+      <th style="text-align:right;padding:4px 6px">Fitness</th>
+      <th style="text-align:right;padding:4px 6px">Win%</th>
+      <th style="text-align:right;padding:4px 6px">Sharpe</th>
+      <th style="text-align:right;padding:4px 6px">Trades</th>
+      <th style="text-align:left;padding:4px 6px">Nee</th>
+    </tr></thead>
+    <tbody>${hof.map((f,i)=>`<tr style="border-bottom:1px solid var(--rule);${i===0?'background:rgba(13,138,64,.08)':''}">
+      <td style="text-align:left;padding:4px 6px;font-weight:700;color:${i===0?'#d4a017':'#888'}">${i===0?'👑':''}${i+1}</td>
+      <td style="padding:4px 6px;font-weight:600;color:#0d8a40">${f.nom}</td>
+      <td style="padding:4px 6px;color:#6366f1;font-family:monospace;font-size:10px" title="${f.gene_a} ${f.operation} ${f.gene_b} → ${f.transform}">${f.formule}</td>
+      <td style="text-align:right;padding:4px 6px;font-weight:700">${f.fitness.toFixed(3)}</td>
+      <td style="text-align:right;padding:4px 6px;color:${f.win_rate>55?'#0d8a40':'#888'}">${f.win_rate}%</td>
+      <td style="text-align:right;padding:4px 6px">${f.sharpe.toFixed(2)}</td>
+      <td style="text-align:right;padding:4px 6px">${f.nb_trades}</td>
+      <td style="padding:4px 6px;color:#888;font-size:10px">${f.naissance||''}</td>
+    </tr>`).join('')}</tbody></table>`:'<div style="padding:12px;color:#888;text-align:center">Aucune formule decouverte</div>';
 
   const adn=rex.adn||{};
   el('corp-adn').innerHTML=`

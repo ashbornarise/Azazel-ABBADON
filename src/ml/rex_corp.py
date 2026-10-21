@@ -188,6 +188,7 @@ class RexCorporation:
         self.cycle_count: int = 0
         self.total_profits: float = 0.0
         self.total_pertes: float = 0.0
+        self.reunions: list = []
         self.charger()
 
         if not self.employes:
@@ -437,11 +438,10 @@ class RexCorporation:
             "dialogues": dialogues,
         }
 
-        if not hasattr(self, 'reunions'):
-            self.reunions = []
         self.reunions.append(reunion)
         if len(self.reunions) > 50:
             self.reunions = self.reunions[-50:]
+        self.sauver()
 
         return reunion
 
@@ -469,6 +469,7 @@ class RexCorporation:
                 self.total_profits = data.get("total_profits", 0)
                 self.total_pertes = data.get("total_pertes", 0)
                 self.historique_points = data.get("historique_points", [])
+                self.reunions = data.get("reunions", [])
                 for ed in data.get("employes", []):
                     emp = Employe(**ed)
                     self.employes[emp.id] = emp
@@ -485,6 +486,7 @@ class RexCorporation:
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
             "effectif": len(self.employes),
             "historique_points": self.historique_points[-500:],
+            "reunions": self.reunions[-50:],
             "employes": [asdict(e) for e in self.employes.values()],
         }
         with open(CORP_PATH, "w") as f:

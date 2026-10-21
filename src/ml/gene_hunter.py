@@ -290,6 +290,22 @@ class GeneHunter:
         return sum(scores) / len(scores)
 
     def get_adn_resume(self) -> dict:
+        formules = []
+        for c in self.hall_of_fame:
+            formules.append({
+                "nom": c.nom,
+                "formule": f"{c.transform}({c.gene_a} {c.operation} {c.gene_b})",
+                "gene_a": c.gene_a,
+                "gene_b": c.gene_b,
+                "operation": c.operation,
+                "transform": c.transform,
+                "fitness": round(c.fitness, 4),
+                "win_rate": round(c.win_rate, 1),
+                "sharpe": round(c.sharpe, 2),
+                "nb_trades": c.nb_trades,
+                "generation": c.generation,
+                "naissance": c.naissance,
+            })
         return {
             "generation": self.generation,
             "nb_champions": len(self.hall_of_fame),
@@ -298,4 +314,5 @@ class GeneHunter:
             "champion_fitness": self.hall_of_fame[0].fitness if self.hall_of_fame else 0,
             "champion_winrate": self.hall_of_fame[0].win_rate if self.hall_of_fame else 0,
             "formules_uniques": len(set(c.nom for c in self.hall_of_fame)),
+            "hall_of_fame": formules,
         }
