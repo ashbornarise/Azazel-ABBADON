@@ -83,6 +83,21 @@ Tes stats de duel (apprends de tes erreurs):
 - Score: {md.get('points', 0)} pts | Precision: {md.get('winrate', 0)}%
 - Derniers resultats: {md.get('derniers', 'aucun')}"""
 
+        section_exchange = ""
+        if armes.get("exchange"):
+            ex = armes["exchange"]
+            parts = ["\nDonnees Exchange LIVE (Cortex est aveugle ici):"]
+            if "ticker" in ex:
+                t = ex["ticker"]
+                parts.append(f"- Volume 24h: ${t.get('volume_24h', 0):,.0f} | Change 24h: {t.get('change_24h_pct', 0)}%")
+            if "orderbook" in ex:
+                ob = ex["orderbook"]
+                parts.append(f"- Orderbook: Acheteurs {ob.get('pression_achat_pct', 50)}% vs Vendeurs {ob.get('pression_vente_pct', 50)}%")
+            if "funding" in ex:
+                f = ex["funding"]
+                parts.append(f"- Funding rate: {f.get('taux', 0)}% ({f.get('sentiment', 'neutre')})")
+            section_exchange = "\n".join(parts)
+
         section_ea = ""
         if armes.get("ea_strategies"):
             ea = armes["ea_strategies"]
@@ -116,7 +131,7 @@ Indicateurs de marche:
 - Distance MA50: {indicateurs.get('ma50_dist', 'N/A')}
 - Volatilite: {indicateurs.get('volatilite', 'N/A')}
 - Position dans range 20j: {indicateurs.get('range_position', 'N/A')}
-{section_ea}{section_patterns}{section_gene}{section_historique}{section_duels}
+{section_ea}{section_exchange}{section_patterns}{section_gene}{section_historique}{section_duels}
 
 Raisonne etape par etape en utilisant TOUTES tes armes (EA, patterns, indicateurs).
 Puis reponds UNIQUEMENT en JSON valide:

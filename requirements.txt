@@ -7,3 +7,5 @@ xgboost>=2.0
 optuna>=3.4
 alpaca-py>=0.21
 catboost>=1.2
+ccxt>=4.0
+pandas-ta>=0.3.14

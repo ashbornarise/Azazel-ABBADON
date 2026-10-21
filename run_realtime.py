@@ -60,6 +60,7 @@ from src.ml.rex_corp import RexCorporation
 from src.ml.deepseek_rival import Rivalite
 from src.ml.candlestick_patterns import calculer_patterns
 from src.ml.ea_strategies import analyser_ea_complet
+from src.ml.exchange_intel import ExchangeIntel
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
@@ -475,6 +476,7 @@ social_intel = SocialIntelligence()
 gene_hunter = GeneHunter(taille_population=50)
 rex_corp = RexCorporation()
 rivalite = Rivalite(os.environ.get("DEEPSEEK_API_KEY", ""))
+exchange_intel = ExchangeIntel()
 deep_models = {}
 DEEP_RETRAIN_INTERVAL = 1800
 
@@ -1338,6 +1340,13 @@ def analyser_et_trader():
                         ea_result = analyser_ea_complet(do, dh, dl, dc, dv)
                         if ea_result.get("disponible"):
                             arsenal_ds["ea_strategies"] = ea_result
+                    except Exception:
+                        pass
+
+                    try:
+                        ex_data = exchange_intel.analyser_crypto(sym)
+                        if ex_data:
+                            arsenal_ds["exchange"] = ex_data
                     except Exception:
                         pass
 
