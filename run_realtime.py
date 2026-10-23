@@ -116,6 +116,7 @@ PHASES = [
 
 PORTFOLIO_TP_PCT = 50.0
 CHECKPOINT_STEP = 5.0
+PROFIT_LOCK_PCT = 50.0  # On verrouille 50% du profit record
 
 def get_phase(capital):
     for i, phase in enumerate(PHASES):
@@ -127,6 +128,88 @@ def get_phase(capital):
 def reduire_positions_excessives():
     """Ne fait rien — le max_positions est gere a l'achat."""
     pass
+
+
+def verifier_profit_lock():
+    """
+    PROFIT LOCK — Verrouillage des gains quand le portefeuille fait un record.
+    Quand capital atteint un nouveau plus_haut, on pose un plancher:
+    plancher = capital_initial + (profit_record * PROFIT_LOCK_PCT / 100)
+    Si le capital redescend sous ce plancher, on coupe la pire position.
+    Exemple: pic a $105.77, profit = $5.77, plancher = $100 + $2.88 = $102.88
+    """
+    capital = etat.get("capital", 0)
+    plus_haut = etat.get("plus_haut", CAPITAL_INIT)
+    profit_record = plus_haut - CAPITAL_INIT
+    if profit_record <= 0:
+        return
+
+    plancher = CAPITAL_INIT + (profit_record * PROFIT_LOCK_PCT / 100)
+    etat["_profit_lock_floor"] = round(plancher, 2)
+
+    if capital >= plancher:
+        return
+
+    perte_depuis_pic = plus_haut - capital
+    cortex_log("RISK", "PROFIT-LOCK",
+        f"ALERTE: Capital {capital:.2f}$ sous le plancher {plancher:.2f}$ "
+        f"(pic {plus_haut:.2f}$, perte {perte_depuis_pic:.2f}$)")
+
+    pire_sym = None
+    pire_pnl = 0
+    for sym, pos in etat["positions"].items():
+        if not pos.get("en_position"):
+            continue
+        sig = etat["signaux"].get(sym, {})
+        prix = sig.get("prix", pos.get("prix_entree", 0))
+        if prix <= 0:
+            continue
+        pnl_pct = (prix - pos["prix_entree"]) / pos["prix_entree"] * 100
+        if pire_sym is None or pnl_pct < pire_pnl:
+            pire_sym = sym
+            pire_pnl = pnl_pct
+
+    if not pire_sym:
+        return
+
+    pos = etat["positions"][pire_sym]
+    sig = etat["signaux"].get(pire_sym, {})
+    prix = sig.get("prix", pos.get("prix_entree", 0))
+    valeur = pos["quantite"] * prix
+    pnl = valeur - pos["montant_entree"]
+    now = datetime.now(timezone.utc)
+
+    etat["cash"] += valeur
+    if pnl >= 0:
+        etat["trades_gagnants"] += 1
+        etat["gain_total"] += pnl
+    else:
+        etat["trades_perdants"] += 1
+        etat["perte_totale"] += abs(pnl)
+    etat["positions"][pire_sym] = {"en_position": False}
+    broker_sell(pire_sym)
+    etat["nb_trades"] += 1
+    etat["trades"].append({
+        "date": now.strftime("%m-%d %H:%M"),
+        "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
+        "sym": pire_sym, "nom": ACTIFS.get(pire_sym, pire_sym),
+        "action": "PROFIT-LOCK",
+        "prix": round(prix, 2),
+        "montant": round(valeur, 2),
+        "pnl": round(pnl, 2),
+        "capital": round(etat["cash"], 2),
+        "raison": f"Profit Lock: capital {capital:.2f}$ < plancher {plancher:.2f}$",
+    })
+    log_event("PROFIT-LOCK", {
+        "sym": pire_sym, "prix": round(prix, 2), "pnl": round(pnl, 2),
+        "capital": round(etat["cash"], 2), "plancher": round(plancher, 2),
+        "plus_haut": round(plus_haut, 2),
+    })
+    cortex_log("SELL", "PROFIT-LOCK",
+        f"COUPE {pire_sym} ({pire_pnl:+.1f}%) — capital sous plancher "
+        f"{plancher:.2f}$ | PnL: {pnl:+.2f}$")
+    print(f"  [PROFIT-LOCK] Coupe {pire_sym} ({pire_pnl:+.1f}%) — "
+          f"capital {capital:.2f}$ < plancher {plancher:.2f}$")
 
 
 def verifier_portfolio_tp():
@@ -674,6 +757,8 @@ def calculer_valeur_totale():
     etat["portfolio_gain_pct"] = round(gain_pct, 2)
     etat["portfolio_tp_target"] = PORTFOLIO_TP_PCT
     etat["next_checkpoint"] = int(gain_pct / CHECKPOINT_STEP + 1) * CHECKPOINT_STEP if gain_pct > 0 else CHECKPOINT_STEP
+    profit_record = etat["plus_haut"] - CAPITAL_INIT
+    etat["profit_lock_floor"] = round(CAPITAL_INIT + (profit_record * PROFIT_LOCK_PCT / 100), 2) if profit_record > 0 else CAPITAL_INIT
     nb_ouvertes = sum(1 for p in etat["positions"].values() if p.get("en_position"))
     etat["max_positions"] = phase.get("max_positions", 10)
     etat["positions_ouvertes"] = nb_ouvertes
@@ -697,14 +782,14 @@ def verifier_tp_trailing(sym, nom, prix):
         pos["pic_prix"] = max(pos["pic_prix"], prix)
     else:
         pos["pic_prix"] = prix
-    if pnl_pct >= 2.0 and not pos.get("trailing_active"):
+    if pnl_pct >= 1.0 and not pos.get("trailing_active"):
         pos["trailing_active"] = True
-        pos["stop_loss"] = round(entry * 1.005, 4)
-        cortex_log("ML", "TRAILING", f"{nom}: Trailing actif, SL releve a breakeven+0.5% ({pos['stop_loss']:.2f})")
+        pos["stop_loss"] = round(entry * 1.003, 4)
+        cortex_log("ML", "TRAILING", f"{nom}: Trailing actif @ +{pnl_pct:.1f}%, SL breakeven+0.3% ({pos['stop_loss']:.2f})")
     if pos.get("trailing_active") and pos["pic_prix"] > 0:
         sl_initial = pos.get("sl_initial", entry * 0.95)
         nouveau_sl = trailing_paliers(entry, sl_initial, prix, palier_ratio=1.75)
-        trail_sl_pct = round(pos["pic_prix"] * 0.97, 4)
+        trail_sl_pct = round(pos["pic_prix"] * 0.98, 4)
         nouveau_sl = max(nouveau_sl, trail_sl_pct)
         if nouveau_sl > pos.get("stop_loss", 0):
             pos["stop_loss"] = nouveau_sl
@@ -987,6 +1072,7 @@ def fetch_prix():
     with lock:
         calculer_valeur_totale()
     verifier_portfolio_tp()
+    verifier_profit_lock()
     reduire_positions_excessives()
 
     prix_snap = {}
