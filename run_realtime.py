@@ -132,17 +132,27 @@ def reduire_positions_excessives():
 
 def verifier_profit_lock():
     """
-    PROFIT LOCK — Verrouillage des gains quand le portefeuille fait un record.
-    Quand capital atteint un nouveau plus_haut, on pose un plancher:
-    plancher = capital_initial + (profit_record * PROFIT_LOCK_PCT / 100)
-    Si le capital redescend sous ce plancher, on coupe la pire position.
-    Exemple: pic a $105.77, profit = $5.77, plancher = $100 + $2.88 = $102.88
+    PROFIT LOCK V2 — Protege les gains sans cascade destructrice.
+    - Cooldown de 30 min entre chaque coupe
+    - Max 1 coupe par cycle
+    - Ne coupe que si la position perd plus de -2%
+    - Desactive si capital < capital initial (plus rien a proteger)
     """
     capital = etat.get("capital", 0)
     plus_haut = etat.get("plus_haut", CAPITAL_INIT)
     profit_record = plus_haut - CAPITAL_INIT
-    if profit_record <= 0:
+    if profit_record <= 1.0:
         return
+
+    if capital <= CAPITAL_INIT:
+        return
+
+    now = datetime.now(timezone.utc)
+    last_lock = etat.get("_last_profit_lock_ts")
+    if last_lock:
+        elapsed = (now - datetime.fromisoformat(last_lock)).total_seconds()
+        if elapsed < 1800:
+            return
 
     plancher = CAPITAL_INIT + (profit_record * PROFIT_LOCK_PCT / 100)
     etat["_profit_lock_floor"] = round(plancher, 2)
@@ -150,10 +160,9 @@ def verifier_profit_lock():
     if capital >= plancher:
         return
 
-    perte_depuis_pic = plus_haut - capital
-    cortex_log("RISK", "PROFIT-LOCK",
-        f"ALERTE: Capital {capital:.2f}$ sous le plancher {plancher:.2f}$ "
-        f"(pic {plus_haut:.2f}$, perte {perte_depuis_pic:.2f}$)")
+    nb_positions = sum(1 for p in etat["positions"].values() if p.get("en_position"))
+    if nb_positions <= 1:
+        return
 
     pire_sym = None
     pire_pnl = 0
@@ -165,7 +174,7 @@ def verifier_profit_lock():
         if prix <= 0:
             continue
         pnl_pct = (prix - pos["prix_entree"]) / pos["prix_entree"] * 100
-        if pire_sym is None or pnl_pct < pire_pnl:
+        if pnl_pct < -2.0 and (pire_sym is None or pnl_pct < pire_pnl):
             pire_sym = sym
             pire_pnl = pnl_pct
 
@@ -177,7 +186,6 @@ def verifier_profit_lock():
     prix = sig.get("prix", pos.get("prix_entree", 0))
     valeur = pos["quantite"] * prix
     pnl = valeur - pos["montant_entree"]
-    now = datetime.now(timezone.utc)
 
     etat["cash"] += valeur
     if pnl >= 0:
@@ -189,6 +197,7 @@ def verifier_profit_lock():
     etat["positions"][pire_sym] = {"en_position": False}
     broker_sell(pire_sym)
     etat["nb_trades"] += 1
+    etat["_last_profit_lock_ts"] = now.isoformat()
     etat["trades"].append({
         "date": now.strftime("%m-%d %H:%M"),
         "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
@@ -664,11 +673,12 @@ def charger_etat():
             for k in keys_to_restore:
                 if k in saved:
                     etat[k] = saved[k]
-            if etat["plus_haut"] > etat["capital"] * 1.15:
+            if etat["plus_haut"] > etat["capital"] * 1.04:
                 old_ph = etat["plus_haut"]
                 etat["plus_haut"] = etat["capital"]
                 etat["drawdown"] = 0.0
-                print(f"[STATE] RECOVERY: plus_haut reset {old_ph:.2f} -> {etat['capital']:.2f} (correction post-bug)")
+                etat["_last_profit_lock_ts"] = None
+                print(f"[STATE] RECOVERY: plus_haut reset {old_ph:.2f} -> {etat['capital']:.2f} (drawdown trop ancien, fresh start)")
             print(f"[STATE] Etat restaure: ${etat['capital']:.2f} capital, {sum(1 for p in etat['positions'].values() if p.get('en_position'))} positions actives")
             return True
         except Exception as e:
