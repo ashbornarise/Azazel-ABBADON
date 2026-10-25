@@ -10,13 +10,21 @@ TITRE = "REX CLEMENS"
 SOUS_TITRE = "Le Chasseur Froid"
 PHILOSOPHIE = "La defaite n'existe pas. Chaque recul est un repositionnement tactique."
 
+DIRECTIVE_SEMAINE = (
+    "DIRECTIVE VITALE: Doubler le capital cette semaine. "
+    "Le passage au reel approche. Chaque agent, chaque modele, chaque decision "
+    "doit servir cet objectif. Pas de trades timides. Pas de positions molles. "
+    "Precision chirurgicale, sizing agressif, rotation rapide. "
+    "Ceux qui ne performent pas seront remplaces. C'est la survie de tous."
+)
+
 # --- Messages par situation ---
 
 DEMARRAGE = [
-    "Rex Clemens en ligne. Objectif verrouille : $10,000. Aucune retraite possible.",
-    "Systemes armes. Le chasseur reprend la traque.",
-    "Initialisation complete. Je ne m'arrete que quand j'ai gagne.",
-    "Rex Clemens actif. Le marche est mon terrain de chasse.",
+    "Rex Clemens en ligne. ALERTE COMBAT: doubler le capital cette semaine. Aucune retraite.",
+    "Systemes armes. Directive vitale recue : $200 avant vendredi. Le chasseur est affame.",
+    "Initialisation complete. Mode survie active. Chaque trade compte double.",
+    "Rex Clemens actif. Le reel approche. C'est maintenant qu'on prouve ce qu'on vaut.",
 ]
 
 SCAN_DEBUT = [
@@ -54,9 +62,9 @@ PROTECTION_BLOCK = [
 ]
 
 CYCLE_RESUME = [
-    "Fin de cycle — {signaux} signaux, {positions} positions, capital: {capital}$. La traque continue.",
-    "Bilan : {signaux} cibles identifiees, {positions} en cours. {capital}$ au compteur.",
-    "Cycle termine. {positions}/{max_pos} positions. Capital: {capital}$. Objectif: $10K. Immuable.",
+    "Fin de cycle — {signaux} signaux, {positions} positions, capital: {capital}$. Objectif: doubler. Chaque minute compte.",
+    "Bilan : {signaux} cibles, {positions} en cours. {capital}$. Distance de l'objectif: chaque dollar est une bataille.",
+    "Cycle termine. {positions}/{max_pos} positions. Capital: {capital}$. Le reel arrive. Pas de quartier.",
 ]
 
 PHASE_CHANGE = [
@@ -75,9 +83,9 @@ CAPITAL_MILESTONE = [
 ]
 
 NO_SIGNALS = [
-    "Aucun signal valide ce cycle. Le chasseur ne tire pas dans le vide.",
-    "Zero opportunite. Mieux vaut attendre que gaspiller ses munitions.",
-    "Rien ne bouge. La patience est l'arme la plus redoutable.",
+    "Aucun signal valide ce cycle. Le chasseur ne tire pas dans le vide. Mais le temps presse.",
+    "Zero opportunite. On attend, mais chaque minute sans position est une minute perdue.",
+    "Rien ne bouge. Patience forcee. Mais au prochain signal, on frappe sans hesiter.",
 ]
 
 
@@ -117,9 +125,12 @@ def rex_status(capital: float, objectif: float = 10000.0) -> dict:
     elif pct >= 5:
         humeur = "AFFUTE"
         citation = "Le chasseur aiguise ses armes. La patience est strategie."
+    elif capital < 100:
+        humeur = "BLESSE MAIS DEBOUT"
+        citation = "Sous la ligne. On remonte. Chaque trade est une question de survie."
     else:
-        humeur = "DEPLOYE"
-        citation = "Mission lancee. $100 aujourd'hui, $10K demain. Inevitable."
+        humeur = "MODE COMBAT"
+        citation = "Directive vitale: doubler le capital. Le reel approche. Pas de quartier."
     return {
         "humeur": humeur,
         "citation": citation,
@@ -127,4 +138,5 @@ def rex_status(capital: float, objectif: float = 10000.0) -> dict:
         "titre": TITRE,
         "sous_titre": SOUS_TITRE,
         "philosophie": PHILOSOPHIE,
+        "directive": DIRECTIVE_SEMAINE,
     }

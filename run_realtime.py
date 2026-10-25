@@ -1407,7 +1407,7 @@ def analyser_et_trader():
 
             duel_result = None
             hist_sym = hist_cache.get(sym)
-            if hist_sym is not None and rivalite.deepseek.disponible and random.random() < 0.15:
+            if hist_sym is not None and rivalite.deepseek.disponible and random.random() < 0.25:
                 try:
                     dc = hist_sym["Close"].values.tolist()
                     dh = hist_sym["High"].values.tolist()
