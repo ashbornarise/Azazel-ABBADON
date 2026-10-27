@@ -140,8 +140,10 @@ Indicateurs de marche:
 {section_ea}{section_exchange}{section_patterns}{section_gene}{section_historique}{section_duels}
 
 Raisonne etape par etape en utilisant TOUTES tes armes (EA, patterns, indicateurs).
-Puis reponds UNIQUEMENT en JSON valide:
-{{"decision": "ACHAT" ou "NEUTRE" ou "CASH", "confiance": nombre entre 0 et 100, "raison": "explication courte max 50 mots"}}"""
+IMPORTANT: Tu DOIS choisir un camp. ACHAT ou CASH. Pas de NEUTRE — un strategue indecis est un strategue mort.
+Si tu dis NEUTRE, tu perds automatiquement le duel. Prends position, assume, gagne.
+Reponds UNIQUEMENT en JSON valide:
+{{"decision": "ACHAT" ou "CASH", "confiance": nombre entre 0 et 100, "raison": "explication courte max 50 mots"}}"""
 
         try:
             resp = requests.post(
@@ -331,8 +333,8 @@ class Rivalite:
             return
 
         hausse = pnl >= 0
-        cortex_ok = (pred["cortex"] == "ACHAT" and hausse) or (pred["cortex"] == "CASH" and not hausse)
-        ds_ok = (pred["deepseek"] == "ACHAT" and hausse) or (pred["deepseek"] == "CASH" and not hausse)
+        cortex_ok = (pred["cortex"] == "ACHAT" and hausse) or (pred["cortex"] in ("CASH", "NEUTRE") and not hausse)
+        ds_ok = (pred["deepseek"] == "ACHAT" and hausse) or (pred["deepseek"] in ("CASH", "NEUTRE") and not hausse)
 
         self.cortex_total += 1
         self.deepseek_total += 1

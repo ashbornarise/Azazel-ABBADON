@@ -987,7 +987,7 @@ def verifier_tp_deadline():
         except ValueError:
             continue
         mt = _market_type(sym)
-        max_h = 48 if mt == "crypto" else 40
+        max_h = 24 if mt == "crypto" else 16
         est_h_old = pos.get("tp_est_hours", 0)
         if est_h_old > max_h:
             new_deadline = datetime.strptime(pos.get("date", now.strftime("%Y-%m-%d %H:%M")), "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc) + timedelta(hours=max_h * 1.3)
@@ -1003,10 +1003,8 @@ def verifier_tp_deadline():
         nom = ACTIFS.get(sym, sym)
         valeur = pos["quantite"] * prix
         pnl = valeur - pos["montant_entree"]
-        if pnl >= 0:
-            continue
         est_h = pos.get("tp_est_hours", 0)
-        elapsed_h = (now - deadline).total_seconds() / 3600 + est_h * 1.3
+        action = "TAKE-PROFIT" if pnl >= 0 else "VENTE"
         etat["cash"] += valeur
         if pnl >= 0:
             etat["trades_gagnants"] += 1
@@ -1021,18 +1019,18 @@ def verifier_tp_deadline():
             "date": now.strftime("%m-%d %H:%M"),
             "ts_utc": now.strftime("%Y-%m-%dT%H:%M"),
             "sym": sym, "nom": nom,
-            "action": "VENTE",
+            "action": action,
             "prix": round(prix, 2),
             "montant": round(valeur, 2),
             "pnl": round(pnl, 2),
             "capital": round(etat["cash"], 2),
-            "raison": f"TP deadline expire ({est_h:.0f}h + 30%)",
+            "raison": f"Deadline: encaisse {pnl:+.2f}$ apres {est_h:.0f}h",
         })
         protections.apres_trade(sym, pnl)
         protections.stop_technique.fermer_position(sym)
         log_event("VENTE", {"sym": sym, "prix": round(prix, 2), "pnl": round(pnl, 2), "capital": round(etat["cash"], 2), "raison": "tp_deadline"})
-        cortex_log("SELL", "RISK", f"{nom} ({sym}): TP DEADLINE EXPIRE ({est_h:.0f}h +30%) @ {prix:.2f} | PnL: {pnl:+.2f}$")
-        print(f"  [TP-DEADLINE] {nom}: delai depasse, fermeture | PnL: {pnl:+.2f}$")
+        cortex_log("SELL", "DEADLINE", f"{nom} ({sym}): DEADLINE {est_h:.0f}h @ {prix:.2f} | PnL: {pnl:+.2f}$ | {action}")
+        print(f"  [DEADLINE] {nom}: temps ecoule, {action} | PnL: {pnl:+.2f}$")
         closed += 1
     if closed:
         with lock:
@@ -1520,8 +1518,8 @@ def analyser_et_trader():
                 sl_struct = calculer_sl_structurel(lows, n=15) if lows else 0
                 tp_struct = calculer_tp_structurel(highs, n=15) if highs else 0
 
-                sl_prix = sl_struct if sl_struct > 0 and sl_struct < prix_actuel * 0.98 else round(prix_actuel * 0.95, 4)
-                tp_prix = tp_struct if tp_struct > prix_actuel * 1.02 else round(prix_actuel * 1.08, 4)
+                sl_prix = sl_struct if sl_struct > 0 and sl_struct < prix_actuel * 0.98 else round(prix_actuel * 0.97, 4)
+                tp_prix = tp_struct if tp_struct > prix_actuel * 1.015 else round(prix_actuel * 1.035, 4)
                 if montant >= 1:
                     qte = montant / prix_actuel
                     tp_dist_pct = abs(tp_prix - prix_actuel) / prix_actuel
@@ -1530,7 +1528,7 @@ def analyser_et_trader():
                     mt = _market_type(sym)
                     hours_per_day = 24 if mt == "crypto" else 6.5 if mt.startswith("us") else 8
                     tp_est_raw = est_days * hours_per_day
-                    max_deadline_h = 48 if mt == "crypto" else 40
+                    max_deadline_h = 24 if mt == "crypto" else 16
                     tp_est_capped = min(tp_est_raw, max_deadline_h)
                     tp_deadline = now + timedelta(hours=tp_est_capped * 1.3)
                     etat["positions"][sym] = {
@@ -2025,7 +2023,7 @@ def main():
             pos["stop_loss"] = round(prix * 0.95, 4)
             fixed_sl_tp += 1
         if not pos.get("take_profit") or pos["take_profit"] <= 0:
-            pos["take_profit"] = round(prix * 1.08, 4)
+            pos["take_profit"] = round(prix * 1.035, 4)
     if fixed_sl_tp:
         print(f"[FIX] {fixed_sl_tp} positions: SL/TP par defaut ajoutes (-5%/+8%)")
     fixed_deadline = 0
