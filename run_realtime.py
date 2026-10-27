@@ -45,6 +45,7 @@ from src.ml.market_intel import MarketIntelligence
 from src.ml.deep_model import DeepEnsemble
 from src.ml.social_intel import SocialIntelligence
 from src.ml.deepseek_rival import interroger_deepseek, enregistrer_resultat_duel, get_stats as deepseek_stats
+from src.persona import rex_dit, rex_status
 from src.strategies.ml_strategy import MLStrategy
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
