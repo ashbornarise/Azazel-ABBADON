@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Rex Clemens Capital · Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Archivo:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0a;--bg2:#111;--bg3:#181818;--fg:#e8e8e8;--fg2:#888;
+  --gold:#c9a227;--gold-dim:rgba(201,162,39,.12);
+  --green:#00c853;--red:#ff1744;--blue:#448aff;--cyan:#26c6da;
+  --rule:#222;--font:'IBM Plex Mono',monospace;--display:'Archivo',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:13px;min-height:100vh}
+
+/* Header */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--rule);background:var(--bg);position:sticky;top:0;z-index:50;flex-wrap:wrap;gap:8px}
+.hdr .brand{display:flex;align-items:center;gap:10px}
+.hdr .monogram{width:32px;height:32px;border:1px solid var(--gold);color:var(--gold);display:grid;place-items:center;font-weight:700;font-size:12px;letter-spacing:.05em}
+.hdr .title{font-family:var(--display);font-weight:800;font-size:14px;letter-spacing:.06em;text-transform:uppercase}
+.hdr .sub{color:var(--fg2);font-size:11px}
+.hdr .badges{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.badge{padding:4px 8px;border:1px solid var(--rule);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.badge-gold{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.badge-green{border-color:var(--green);color:var(--green)}
+.badge-red{border-color:var(--red);color:var(--red)}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--rule);background:var(--bg);overflow-x:auto}
+.tab{padding:10px 18px;cursor:pointer;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--fg2);border-bottom:2px solid transparent;white-space:nowrap;transition:color .2s}
+.tab:hover{color:var(--fg)}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.tab-panel{display:none;padding:16px}
+.tab-panel.active{display:block}
+
+/* KPIs */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--rule);margin-bottom:16px}
+.kpi{background:var(--bg2);padding:12px 14px}
+.kpi-label{font-size:10px;color:var(--fg2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.kpi-val{font-size:20px;font-weight:700}
+.kpi-sub{font-size:10px;color:var(--gold);margin-top:2px}
+
+/* Chart container */
+.chart-toolbar{display:flex;align-items:center;gap:8px;padding:8px 0;flex-wrap:wrap}
+.chart-toolbar select,.chart-toolbar button{background:var(--bg);color:var(--fg);border:1px solid var(--rule);padding:5px 10px;font-family:var(--font);font-size:11px;cursor:pointer}
+.chart-toolbar button:hover{border-color:var(--gold);color:var(--gold)}
+.chart-toolbar button.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+.chart-wrap{position:relative;background:var(--bg2);border:1px solid var(--rule);overflow:hidden}
+canvas{display:block}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--rule)}
+th{color:var(--fg2);font-weight:500;text-transform:uppercase;font-size:10px;letter-spacing:.04em;position:sticky;top:0;background:var(--bg2)}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.pill{display:inline-block;padding:2px 6px;font-size:10px;border:1px solid var(--rule)}
+.pill-buy{border-color:var(--green);color:var(--green)}
+.pill-sell{border-color:var(--red);color:var(--red)}
+.pill-sl{border-color:#ff6b35;color:#ff6b35;background:rgba(255,107,53,.1)}
+.pill-tp{border-color:#06b6d4;color:#06b6d4;background:rgba(6,182,212,.1)}
+.pill-neutral{border-color:var(--fg2);color:var(--fg2)}
+
+/* Panels */
+.panel{background:var(--bg2);border:1px solid var(--rule);margin-bottom:16px}
+.panel-hdr{padding:10px 14px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.panel-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--gold)}
+.panel-body{padding:14px;overflow-x:auto}
+
+/* Grid */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+/* ML bars */
+.bar-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.bar-label{width:100px;font-size:10px;color:var(--fg2);text-align:right;flex-shrink:0}
+.bar-track{flex:1;height:14px;background:var(--bg);border:1px solid var(--rule);position:relative}
+.bar-fill{height:100%;transition:width .3s}
+.bar-val{width:40px;font-size:10px;text-align:right;flex-shrink:0}
+
+/* Pagination */
+.pagination{display:flex;gap:4px;padding:10px 0;justify-content:center}
+.pagination button{background:var(--bg);color:var(--fg);border:1px solid var(--rule);padding:4px 10px;font-family:var(--font);font-size:11px;cursor:pointer}
+.pagination button.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--rule);border-radius:3px}
+
+/* Status */
+#status-bar{padding:6px 16px;background:var(--bg3);border-top:1px solid var(--rule);font-size:10px;color:var(--fg2);display:flex;justify-content:space-between;position:fixed;bottom:0;left:0;right:0;z-index:50}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="brand">
+    <div class="monogram">RC</div>
+    <div>
+      <div class="title">Rex Clemens Capital</div>
+      <div class="sub">Trading Engine v2 · Mode Simulation</div>
+    </div>
+  </div>
+  <div class="badges">
+    <span class="badge badge-gold">SIMULATION</span>
+    <span class="badge badge-green" id="badge-status">ACTIF</span>
+    <span class="badge" id="badge-capital">$100.00</span>
+    <span class="badge" id="badge-pnl">PnL: $0.00</span>
+  </div>
+</div>
+
+<div class="tabs" id="tab-bar">
+  <div class="tab active" data-tab="marches">Marchés</div>
+  <div class="tab" data-tab="trading">Trading</div>
+  <div class="tab" data-tab="historique">Historique</div>
+  <div class="tab" data-tab="ml">Cerveau ML</div>
+</div>
+
+<!-- TAB: MARCHÉS -->
+<div class="tab-panel active" id="panel-marches">
+  <div class="chart-toolbar">
+    <select id="chart-sym">
+      <option value="BTC-USD">BTC-USD Bitcoin</option>
+      <option value="ETH-USD">ETH-USD Ethereum</option>
+      <option value="MSFT">MSFT Microsoft</option>
+      <option value="SOL-USD">SOL-USD Solana</option>
+    </select>
+    <select id="chart-interval">
+      <option value="5m">5 Min</option>
+      <option value="15m">15 Min</option>
+      <option value="1h">1 Heure</option>
+      <option value="1d">1 Jour</option>
+    </select>
+    <select id="chart-period">
+      <option value="1d">1J</option>
+      <option value="5d" selected>5J</option>
+      <option value="1mo">1M</option>
+      <option value="3mo">3M</option>
+    </select>
+    <button id="btn-ma" class="active" onclick="toggleMA()">MA 20/50</button>
+    <button id="btn-vol" class="active" onclick="toggleVol()">Volume</button>
+    <span id="chart-info" style="margin-left:auto;font-size:11px;color:var(--fg2)"></span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="chart-candle" height="480"></canvas>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap" id="asset-cards"></div>
+</div>
+
+<!-- TAB: TRADING -->
+<div class="tab-panel" id="panel-trading">
+  <div class="kpi-row" id="kpi-grid"></div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-hdr">
+        <span class="panel-title">Courbe de Capital</span>
+        <span style="font-size:10px;color:var(--fg2)" id="equity-info"></span>
+      </div>
+      <div class="panel-body"><canvas id="chart-equity" height="220"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-hdr">
+        <span class="panel-title">Positions Actives</span>
+      </div>
+      <div class="panel-body" style="max-height:280px;overflow-y:auto">
+        <table><thead><tr><th>Actif</th><th>Signal</th><th>Prix</th><th>Expo</th><th>Qté</th><th>PnL Lat.</th></tr></thead>
+        <tbody id="table-positions"></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-hdr">
+      <span class="panel-title">Derniers Trades</span>
+    </div>
+    <div class="panel-body" style="max-height:300px;overflow-y:auto">
+      <table><thead><tr><th>Date</th><th>Actif</th><th>Action</th><th>Prix</th><th>Montant</th><th>PnL</th><th>Capital</th></tr></thead>
+      <tbody id="table-trades-recent"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB: HISTORIQUE -->
+<div class="tab-panel" id="panel-historique">
+  <div class="chart-toolbar">
+    <select id="hist-filter">
+      <option value="">Tous les actifs</option>
+      <option value="BTC-USD">BTC-USD</option>
+      <option value="ETH-USD">ETH-USD</option>
+      <option value="MSFT">MSFT</option>
+      <option value="SOL-USD">SOL-USD</option>
+    </select>
+    <span style="margin-left:auto;font-size:11px;color:var(--fg2)" id="hist-info"></span>
+  </div>
+  <div class="panel">
+    <div class="panel-body" style="max-height:600px;overflow-y:auto">
+      <table><thead><tr><th>#</th><th>Date</th><th>Actif</th><th>Nom</th><th>Action</th><th>Prix</th><th>Montant</th><th>PnL</th><th>Capital</th></tr></thead>
+      <tbody id="table-history"></tbody></table>
+    </div>
+  </div>
+  <div class="pagination" id="hist-pagination"></div>
+</div>
+
+<!-- TAB: CERVEAU ML -->
+<div class="tab-panel" id="panel-ml">
+  <div class="kpi-row" id="ml-info-row"></div>
+  <div id="ml-cards"></div>
+</div>
+
+<div id="status-bar">
+  <span id="status-left">Connecté · Simulation</span>
+  <span id="status-right">Prochaine analyse: --:--</span>
+</div>
+
+<script>
+// API base: vide = meme serveur, sinon URL Railway (ex: https://rex-clemens.up.railway.app)
+const API_BASE = window.REX_API_BASE || '';
+
+// === State ===
+let showMA = true, showVol = true;
+let chartCandles = [];
+let chartOffset = 0;
+let candleW = 8;
+const MIN_CW = 3, MAX_CW = 30;
+
+// === Tabs ===
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'marches') loadChart();
+    if (t.dataset.tab === 'historique') loadHistory(1);
+    if (t.dataset.tab === 'ml') loadML();
+  });
+});
+
+function toggleMA() { showMA = !showMA; document.getElementById('btn-ma').classList.toggle('active', showMA); drawCandles(); }
+function toggleVol() { showVol = !showVol; document.getElementById('btn-vol').classList.toggle('active', showVol); drawCandles(); }
+
+// === Candlestick Chart ===
+const cc = document.getElementById('chart-candle');
+const cctx = cc.getContext('2d');
+
+function resizeCanvas() {
+  cc.width = cc.parentElement.clientWidth;
+  drawCandles();
+}
+window.addEventListener('resize', resizeCanvas);
+
+async function loadChart() {
+  const sym = document.getElementById('chart-sym').value;
+  const interval = document.getElementById('chart-interval').value;
+  const period = document.getElementById('chart-period').value;
+  try {
+    const r = await fetch(`${API_BASE}/api/ohlcv?sym=${sym}&interval=${interval}&period=${period}`);
+    const d = await r.json();
+    chartCandles = d.candles || [];
+    chartOffset = Math.max(0, chartCandles.length - Math.floor(cc.width / (candleW + 2)));
+    drawCandles();
+    document.getElementById('chart-info').textContent = `${sym} · ${chartCandles.length} bougies · ${interval}`;
+  } catch(e) {
+    document.getElementById('chart-info').textContent = 'Erreur chargement données';
+  }
+}
+
+function drawCandles() {
+  const W = cc.width, H = cc.height;
+  const ctx = cctx;
+  ctx.clearRect(0, 0, W, H);
+
+  if (!chartCandles.length) {
+    ctx.fillStyle = '#555'; ctx.font = '14px IBM Plex Mono';
+    ctx.fillText('Chargement des données...', W/2 - 100, H/2);
+    return;
+  }
+
+  const rightMargin = 65;
+  const bottomMargin = showVol ? 80 : 30;
+  const topMargin = 10;
+  const chartW = W - rightMargin;
+  const chartH = H - bottomMargin - topMargin;
+  const volH = showVol ? 50 : 0;
+  const priceH = chartH - volH;
+
+  const gap = 2;
+  const step = candleW + gap;
+  const visible = Math.floor(chartW / step);
+  const start = Math.max(0, Math.min(chartOffset, chartCandles.length - visible));
+  const end = Math.min(start + visible, chartCandles.length);
+  const slice = chartCandles.slice(start, end);
+
+  if (!slice.length) return;
+
+  let minP = Infinity, maxP = -Infinity, maxV = 0;
+  for (const c of slice) {
+    if (c.l < minP) minP = c.l;
+    if (c.h > maxP) maxP = c.h;
+    if (c.v > maxV) maxV = c.v;
+  }
+  const pad = (maxP - minP) * 0.05 || 1;
+  minP -= pad; maxP += pad;
+
+  const priceY = p => topMargin + priceH - ((p - minP) / (maxP - minP)) * priceH;
+  const volY = v => topMargin + priceH + volH - (v / (maxV || 1)) * (volH - 4);
+
+  // Grid
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+  const nGridH = 6;
+  for (let i = 0; i <= nGridH; i++) {
+    const y = topMargin + (priceH / nGridH) * i;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(chartW, y); ctx.stroke();
+  }
+
+  // Price labels
+  ctx.fillStyle = '#555'; ctx.font = '10px IBM Plex Mono'; ctx.textAlign = 'left';
+  for (let i = 0; i <= nGridH; i++) {
+    const p = maxP - ((maxP - minP) / nGridH) * i;
+    const y = topMargin + (priceH / nGridH) * i;
+    ctx.fillText(formatPrice(p), chartW + 4, y + 3);
+  }
+
+  // MA calculation
+  if (showMA) {
+    const allClose = chartCandles.map(c => c.c);
+    const ma20 = calcMA(allClose, 20);
+    const ma50 = calcMA(allClose, 50);
+
+    drawMALine(ctx, ma20, start, end, step, chartW, priceY, '#448aff', topMargin);
+    drawMALine(ctx, ma50, start, end, step, chartW, priceY, '#ff9800', topMargin);
+  }
+
+  // Candles
+  for (let i = 0; i < slice.length; i++) {
+    const c = slice[i];
+    const x = i * step + step / 2;
+    const isUp = c.c >= c.o;
+    const color = isUp ? '#00c853' : '#ff1744';
+
+    // Wick
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, priceY(c.h));
+    ctx.lineTo(x, priceY(c.l));
+    ctx.stroke();
+
+    // Body
+    const bodyTop = priceY(Math.max(c.o, c.c));
+    const bodyBot = priceY(Math.min(c.o, c.c));
+    const bodyH = Math.max(1, bodyBot - bodyTop);
+    ctx.fillStyle = color;
+    if (isUp) {
+      ctx.strokeStyle = color;
+      ctx.strokeRect(x - candleW/2, bodyTop, candleW, bodyH);
+    } else {
+      ctx.fillRect(x - candleW/2, bodyTop, candleW, bodyH);
+    }
+
+    // Volume
+    if (showVol && maxV > 0) {
+      ctx.fillStyle = isUp ? 'rgba(0,200,83,0.25)' : 'rgba(255,23,68,0.25)';
+      const vTop = volY(c.v);
+      const vBot = topMargin + priceH + volH;
+      ctx.fillRect(x - candleW/2, vTop, candleW, vBot - vTop);
+    }
+  }
+
+  // Separator line price/volume
+  if (showVol) {
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, topMargin + priceH); ctx.lineTo(chartW, topMargin + priceH); ctx.stroke();
+  }
+
+  // Time labels
+  ctx.fillStyle = '#555'; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'center';
+  const labelEvery = Math.max(1, Math.floor(slice.length / 8));
+  for (let i = 0; i < slice.length; i += labelEvery) {
+    const c = slice[i];
+    const x = i * step + step / 2;
+    const label = c.t.length > 11 ? c.t.slice(11) : c.t.slice(5, 10);
+    ctx.fillText(label, x, H - 4);
+  }
+
+  // Crosshair current price
+  if (slice.length > 0) {
+    const last = slice[slice.length - 1];
+    const y = priceY(last.c);
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = last.c >= last.o ? '#00c853' : '#ff1744';
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(chartW, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = last.c >= last.o ? '#00c853' : '#ff1744';
+    ctx.fillRect(chartW, y - 8, rightMargin, 16);
+    ctx.fillStyle = '#000'; ctx.font = 'bold 10px IBM Plex Mono'; ctx.textAlign = 'left';
+    ctx.fillText(formatPrice(last.c), chartW + 4, y + 4);
+  }
+}
+
+function formatPrice(p) {
+  if (p >= 1000) return p.toFixed(2);
+  if (p >= 1) return p.toFixed(4);
+  return p.toFixed(6);
+}
+
+function calcMA(closes, period) {
+  const ma = new Array(closes.length).fill(null);
+  for (let i = period - 1; i < closes.length; i++) {
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += closes[j];
+    ma[i] = sum / period;
+  }
+  return ma;
+}
+
+function drawMALine(ctx, ma, start, end, step, chartW, priceY, color, topMargin) {
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
+  let started = false;
+  for (let i = start; i < end; i++) {
+    if (ma[i] === null) continue;
+    const x = (i - start) * step + step / 2;
+    const y = priceY(ma[i]);
+    if (y < topMargin || y > priceY(0) + 100) continue;
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+// Chart interaction: scroll + zoom
+cc.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) {
+    candleW = Math.max(MIN_CW, Math.min(MAX_CW, candleW + (e.deltaY > 0 ? -1 : 1)));
+  } else {
+    const scrollAmt = Math.ceil(e.deltaY / 30) * 3;
+    chartOffset = Math.max(0, Math.min(chartCandles.length - 10, chartOffset + scrollAmt));
+  }
+  drawCandles();
+}, {passive: false});
+
+let isDragging = false, dragStartX = 0, dragStartOffset = 0;
+cc.addEventListener('mousedown', e => { isDragging = true; dragStartX = e.clientX; dragStartOffset = chartOffset; });
+cc.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - dragStartX;
+  const step = candleW + 2;
+  const candlesDelta = Math.round(dx / step);
+  chartOffset = Math.max(0, Math.min(chartCandles.length - 10, dragStartOffset - candlesDelta));
+  drawCandles();
+});
+cc.addEventListener('mouseup', () => isDragging = false);
+cc.addEventListener('mouseleave', () => isDragging = false);
+
+document.getElementById('chart-sym').addEventListener('change', loadChart);
+document.getElementById('chart-interval').addEventListener('change', loadChart);
+document.getElementById('chart-period').addEventListener('change', loadChart);
+
+// === Equity Chart ===
+function drawEquity(equity, timestamps) {
+  const canvas = document.getElementById('chart-equity');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.parentElement.clientWidth;
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  if (!equity || equity.length < 2) {
+    ctx.fillStyle = '#555'; ctx.font = '12px IBM Plex Mono';
+    ctx.fillText('En attente de données...', 20, H/2);
+    return;
+  }
+
+  const pad = {t: 10, r: 60, b: 25, l: 10};
+  const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
+  const min = Math.min(...equity), max = Math.max(...equity);
+  const range = max - min || 1;
+  const yScale = p => pad.t + cH - ((p - min) / range) * cH;
+  const xScale = i => pad.l + (i / (equity.length - 1)) * cW;
+
+  // Grid
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (cH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#555'; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'left';
+    const val = max - (range / 4) * i;
+    ctx.fillText('$' + val.toFixed(2), W - pad.r + 4, y + 3);
+  }
+
+  // Fill
+  ctx.beginPath(); ctx.moveTo(xScale(0), yScale(equity[0]));
+  for (let i = 1; i < equity.length; i++) ctx.lineTo(xScale(i), yScale(equity[i]));
+  ctx.lineTo(xScale(equity.length - 1), pad.t + cH);
+  ctx.lineTo(xScale(0), pad.t + cH);
+  ctx.closePath();
+  const lastPnl = equity[equity.length-1] - equity[0];
+  ctx.fillStyle = lastPnl >= 0 ? 'rgba(0,200,83,0.08)' : 'rgba(255,23,68,0.08)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath(); ctx.moveTo(xScale(0), yScale(equity[0]));
+  for (let i = 1; i < equity.length; i++) ctx.lineTo(xScale(i), yScale(equity[i]));
+  ctx.strokeStyle = lastPnl >= 0 ? '#00c853' : '#ff1744';
+  ctx.lineWidth = 2; ctx.stroke();
+
+  // Time labels
+  ctx.fillStyle = '#555'; ctx.font = '9px IBM Plex Mono'; ctx.textAlign = 'center';
+  const step = Math.max(1, Math.floor(equity.length / 6));
+  for (let i = 0; i < equity.length; i += step) {
+    if (timestamps && timestamps[i]) ctx.fillText(timestamps[i], xScale(i), H - 4);
+  }
+}
+
+// === Load Data ===
+async function loadState() {
+  try {
+    const r = await fetch(`${API_BASE}/api/etat`);
+    const d = await r.json();
+
+    // Header badges
+    document.getElementById('badge-capital').textContent = '$' + (d.capital || 0).toFixed(2);
+    const pnl = d.pnl || 0;
+    const bp = document.getElementById('badge-pnl');
+    bp.textContent = `PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${(d.pnl_pct||0).toFixed(1)}%)`;
+    bp.className = 'badge ' + (pnl >= 0 ? 'badge-green' : 'badge-red');
+    document.getElementById('badge-status').textContent = d.actif ? 'ACTIF' : 'ARRÊT';
+    document.getElementById('badge-status').className = 'badge ' + (d.actif ? 'badge-green' : 'badge-red');
+
+    // Status bar
+    document.getElementById('status-right').textContent = `Prochaine analyse: ${d.prochaine_analyse || '--:--'} · Dernière: ${d.derniere_analyse || '--:--'}`;
+
+    // KPIs
+    const winRate = d.nb_trades > 0 ? ((d.trades_gagnants || 0) / d.nb_trades * 100).toFixed(0) : '0';
+    document.getElementById('kpi-grid').innerHTML = [
+      kpiHTML('Capital', '$' + (d.capital||0).toFixed(2), `Initial: $${(d.capital_initial||100).toFixed(2)}`),
+      kpiHTML('PnL Total', `${pnl>=0?'+':''}$${pnl.toFixed(2)}`, `${(d.pnl_pct||0).toFixed(2)}%`),
+      kpiHTML('Drawdown', (d.drawdown||0).toFixed(2) + '%', `Plus haut: $${(d.plus_haut||0).toFixed(2)}`),
+      kpiHTML('Cash', '$' + (d.cash||0).toFixed(2), `Positions: $${(d.valeur_positions||0).toFixed(2)}`),
+      kpiHTML('Trades', d.nb_trades || 0, `G: ${d.trades_gagnants||0} / P: ${d.trades_perdants||0}`),
+      kpiHTML('Win Rate', winRate + '%', `Gain: $${(d.gain_total||0).toFixed(2)} · Perte: $${(d.perte_totale||0).toFixed(2)}`),
+    ].join('');
+
+    // Equity
+    drawEquity(d.equity || [], d.timestamps_equity || []);
+    document.getElementById('equity-info').textContent = `${(d.equity||[]).length} points`;
+
+    // Positions
+    const tb = document.getElementById('table-positions');
+    const sigs = d.signaux || {};
+    const poss = d.positions || {};
+    let posHtml = '';
+    for (const [sym, sig] of Object.entries(sigs)) {
+      const pos = poss[sym] || {};
+      const enPos = pos.en_position;
+      const decClass = sig.decision === 'ACHAT' ? 'pill-buy' : sig.decision === 'CASH' ? 'pill-sell' : 'pill-neutral';
+      const pnlLat = enPos ? ((sig.prix - pos.prix_entree) * pos.quantite) : 0;
+      posHtml += `<tr>
+        <td style="color:var(--gold);font-weight:600">${sym}</td>
+        <td><span class="pill ${decClass}">${sig.decision}</span></td>
+        <td>$${(sig.prix||0).toFixed(2)}</td>
+        <td>${((sig.exposition||0)*100).toFixed(0)}%</td>
+        <td>${enPos ? pos.quantite.toFixed(4) : '—'}</td>
+        <td class="${pnlLat>=0?'pos':'neg'}">${enPos ? (pnlLat>=0?'+':'') + pnlLat.toFixed(2) + '$' : '—'}</td>
+      </tr>`;
+    }
+    tb.innerHTML = posHtml || '<tr><td colspan="6" style="color:var(--fg2)">Aucune donnée</td></tr>';
+
+    // Recent trades
+    const trades = (d.trades || []).slice(-15).reverse();
+    document.getElementById('table-trades-recent').innerHTML = trades.map(t => `<tr>
+      <td>${t.date}</td>
+      <td style="color:var(--gold)">${t.sym}</td>
+      <td><span class="pill ${t.action==='ACHAT'?'pill-buy':t.action==='STOP-LOSS'?'pill-sl':t.action==='TAKE-PROFIT'?'pill-tp':'pill-sell'}">${t.action}</span></td>
+      <td>$${t.prix}</td>
+      <td>$${t.montant}</td>
+      <td class="${(t.pnl||0)>=0?'pos':'neg'}">${t.pnl !== undefined ? (t.pnl>=0?'+':'') + t.pnl.toFixed(2) + '$' : '—'}</td>
+      <td>$${(t.capital||0).toFixed(2)}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:var(--fg2)">Aucun trade</td></tr>';
+
+    // Asset cards
+    let cardsHtml = '';
+    for (const [sym, sig] of Object.entries(sigs)) {
+      const pos = poss[sym] || {};
+      const decColor = sig.decision === 'ACHAT' ? 'var(--green)' : sig.decision === 'CASH' ? 'var(--red)' : 'var(--fg2)';
+      cardsHtml += `<div style="flex:1;min-width:180px;background:var(--bg2);border:1px solid var(--rule);padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-weight:700;color:var(--gold)">${sym}</span>
+          <span class="pill" style="border-color:${decColor};color:${decColor}">${sig.decision}</span>
+        </div>
+        <div style="font-size:18px;font-weight:700">$${(sig.prix||0).toFixed(2)}</div>
+        <div style="font-size:10px;color:var(--fg2)">Expo: ${((sig.exposition||0)*100).toFixed(0)}% ${pos.en_position ? '· EN POSITION' : ''}</div>
+      </div>`;
+    }
+    document.getElementById('asset-cards').innerHTML = cardsHtml;
+
+  } catch(e) {
+    console.error('loadState error:', e);
+  }
+}
+
+function kpiHTML(label, val, sub) {
+  return `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-val">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+}
+
+// === History ===
+let histPage = 1;
+async function loadHistory(page) {
+  histPage = page || 1;
+  const sym = document.getElementById('hist-filter').value;
+  const url = `${API_BASE}/api/history?page=${histPage}&per_page=50${sym ? '&sym=' + sym : ''}`;
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+
+    document.getElementById('hist-info').textContent = `${d.total} trades · Page ${d.page}/${d.pages}`;
+
+    const trades = d.trades || [];
+    document.getElementById('table-history').innerHTML = trades.map((t, i) => `<tr>
+      <td style="color:var(--fg2)">${d.total - ((d.page-1)*50 + i)}</td>
+      <td>${t.date}</td>
+      <td style="color:var(--gold);font-weight:600">${t.sym}</td>
+      <td>${t.nom || ''}</td>
+      <td><span class="pill ${t.action==='ACHAT'?'pill-buy':'pill-sell'}">${t.action}</span></td>
+      <td>$${t.prix}</td>
+      <td>$${t.montant}</td>
+      <td class="${(t.pnl||0)>=0?'pos':'neg'}">${t.pnl !== undefined ? (t.pnl>=0?'+':'') + t.pnl.toFixed(2) + '$' : '—'}</td>
+      <td>$${(t.capital||0).toFixed(2)}</td>
+    </tr>`).join('') || '<tr><td colspan="9" style="color:var(--fg2)">Aucun trade dans l\'historique</td></tr>';
+
+    // Pagination
+    let pagHtml = '';
+    if (d.pages > 1) {
+      if (d.page > 1) pagHtml += `<button onclick="loadHistory(${d.page-1})">◀</button>`;
+      for (let p = 1; p <= Math.min(d.pages, 10); p++) {
+        pagHtml += `<button class="${p===d.page?'active':''}" onclick="loadHistory(${p})">${p}</button>`;
+      }
+      if (d.page < d.pages) pagHtml += `<button onclick="loadHistory(${d.page+1})">▶</button>`;
+    }
+    document.getElementById('hist-pagination').innerHTML = pagHtml;
+  } catch(e) {
+    console.error('loadHistory error:', e);
+  }
+}
+document.getElementById('hist-filter').addEventListener('change', () => loadHistory(1));
+
+// === ML ===
+async function loadML() {
+  try {
+    const r = await fetch(`${API_BASE}/api/ml`);
+    const d = await r.json();
+
+    const prot = d.protections || {};
+    const protHtml = Object.entries(prot).map(([k,v]) => `<span class="pill" style="border-color:var(--cyan);color:var(--cyan);font-size:9px;margin:2px">${k}: ${v}</span>`).join('');
+
+    document.getElementById('ml-info-row').innerHTML = [
+      kpiHTML('Moteur', d.modele || 'Multi-Classifier', `${d.nb_features || 27} features`),
+      kpiHTML('Walk-Forward', `${d.taille_train || 252}j`, `Refit: ${d.pas_reentrain || 21}j`),
+      kpiHTML('Classifieurs', '4', 'RF+LightGBM+XGB+GBM + Optuna'),
+      kpiHTML('Mise a jour', d.timestamp || '—', ''),
+    ].join('');
+
+    let cards = '';
+    for (const [sym, info] of Object.entries(d.actifs || {})) {
+      const decColor = info.decision === 'ACHAT' ? 'var(--green)' : info.decision === 'CASH' ? 'var(--red)' : 'var(--fg2)';
+
+      let fiHtml = '';
+      const fiEntries = Object.entries(info.feature_importance || {}).slice(0, 12);
+      for (const [feat, imp] of fiEntries) {
+        const hue = imp > 15 ? '45' : imp > 8 ? '200' : '0';
+        fiHtml += `<div class="bar-row">
+          <div class="bar-label">${feat}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.min(imp*2,100)}%;background:hsl(${hue},60%,50%)"></div></div>
+          <div class="bar-val">${imp}%</div>
+        </div>`;
+      }
+
+      const bench = (d.benchmark_classifieurs || {})[sym] || {};
+      let benchHtml = '';
+      for (const [clfName, clfR] of Object.entries(bench)) {
+        const isBest = (info.meilleur_modele === clfName);
+        const rowStyle = isBest ? 'background:var(--gold-dim);border-left:2px solid var(--gold)' : '';
+        benchHtml += `<div style="display:flex;gap:8px;padding:3px 6px;font-size:10px;${rowStyle}">
+          <span style="flex:1;font-weight:${isBest?700:400}">${clfName}</span>
+          <span>Acc: ${clfR.accuracy}%</span>
+          <span style="color:var(--fg2)">LL: ${clfR.log_loss}</span>
+          <span style="color:${clfR.proba_hausse>=50?'var(--green)':'var(--red)'}">${clfR.proba_hausse}%</span>
+        </div>`;
+      }
+
+      let expoHtml = '';
+      if (info.historique_expo && info.historique_expo.length > 0) {
+        expoHtml = `<canvas id="expo-${sym.replace(/[^a-z0-9]/gi,'')}" width="400" height="80" style="width:100%;max-width:400px;margin-top:8px"></canvas>`;
+      }
+
+      const seuilA = info.seuil_achat || 55;
+      const seuilV = info.seuil_vente || 40;
+
+      cards += `<div class="panel" style="margin-bottom:12px">
+        <div class="panel-hdr">
+          <div>
+            <span class="panel-title">${sym} — ${info.nom || ''}</span>
+            <span class="pill" style="margin-left:8px;border-color:${decColor};color:${decColor}">${info.decision}</span>
+            <span class="pill" style="margin-left:4px;border-color:var(--blue);color:var(--blue);font-size:9px">${info.meilleur_modele || 'RF'}</span>
+          </div>
+          <span style="font-size:18px;font-weight:700">$${(info.prix||0).toFixed(2)}</span>
+        </div>
+        <div class="panel-body">
+          <div class="grid-2">
+            <div>
+              <div style="margin-bottom:8px;font-size:11px;color:var(--fg2);text-transform:uppercase">Probabilite (${info.nb_classifieurs||4} classifieurs)</div>
+              <div style="display:flex;gap:12px;margin-bottom:12px">
+                <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--green)">${info.proba_hausse||0}%</div><div style="font-size:9px;color:var(--fg2)">HAUSSE</div></div>
+                <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--red)">${info.proba_baisse||0}%</div><div style="font-size:9px;color:var(--fg2)">BAISSE</div></div>
+                <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--gold)">${info.exposition||0}%</div><div style="font-size:9px;color:var(--fg2)">EXPOSITION</div></div>
+              </div>
+              <div style="display:flex;gap:12px;margin-bottom:8px;font-size:10px">
+                <div><span style="color:var(--fg2)">Acc Val:</span> <span style="font-weight:600">${info.accuracy_val||'—'}%</span></div>
+                <div><span style="color:var(--fg2)">LogLoss:</span> <span style="font-weight:600">${info.log_loss||'—'}</span></div>
+                <div><span style="color:var(--fg2)">Train:</span> <span style="font-weight:600">${info.jours_entrainement||'—'}j</span></div>
+              </div>
+              <div style="display:flex;gap:8px;margin-bottom:8px;font-size:10px">
+                <span style="color:var(--green)">Seuil A: >${seuilA}%</span>
+                <span style="color:var(--red)">Seuil V: <${seuilV}%</span>
+                <span style="color:var(--fg2)">(dynamique)</span>
+              </div>
+              ${expoHtml}
+              ${benchHtml ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--fg2);text-transform:uppercase;margin-bottom:4px">Benchmark Classifieurs</div>${benchHtml}</div>` : ''}
+              ${(() => {
+                const ho = (d.hyperopt || {})[sym];
+                if (!ho) return '';
+                let hoHtml = '';
+                for (const [m, info2] of Object.entries(ho)) {
+                  hoHtml += `<div style="display:flex;gap:8px;padding:3px 6px;font-size:10px">
+                    <span style="flex:1;color:var(--cyan)">${m}</span>
+                    <span>Acc: ${info2.accuracy}%</span>
+                    <span style="color:var(--fg2)">LL: ${info2.log_loss}</span>
+                  </div>`;
+                }
+                return `<div style="margin-top:8px"><div style="font-size:10px;color:var(--cyan);text-transform:uppercase;margin-bottom:4px">⚡ Optuna Hyperopt</div>${hoHtml}</div>`;
+              })()}
+            </div>
+            <div>
+              <div style="margin-bottom:8px;font-size:11px;color:var(--fg2);text-transform:uppercase">Feature Importance (top 12)</div>
+              ${fiHtml}
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    const protRow = protHtml ? `<div style="padding:8px 0;margin-bottom:8px">${protHtml}</div>` : '';
+    document.getElementById('ml-cards').innerHTML = protRow + (cards || '<div style="color:var(--fg2);padding:20px">En attente de donnees ML...</div>');
+
+    for (const [sym, info] of Object.entries(d.actifs || {})) {
+      if (info.historique_expo && info.historique_expo.length > 1) {
+        const cvId = 'expo-' + sym.replace(/[^a-z0-9]/gi, '');
+        const cv = document.getElementById(cvId);
+        if (!cv) continue;
+        const ctx = cv.getContext('2d');
+        const W = cv.width, H = cv.height;
+        const data = info.historique_expo;
+        const xStep = W / (data.length - 1);
+
+        ctx.fillStyle = 'rgba(201,162,39,0.08)';
+        ctx.beginPath(); ctx.moveTo(0, H);
+        for (let i = 0; i < data.length; i++) ctx.lineTo(i * xStep, H - (data[i] / 100) * H);
+        ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+
+        ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 1.5; ctx.beginPath();
+        for (let i = 0; i < data.length; i++) {
+          const x = i * xStep, y = H - (data[i] / 100) * H;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        const seuilA = info.seuil_achat || 55;
+        const seuilV = info.seuil_vente || 40;
+        [seuilA, seuilV].forEach((thr, ti) => {
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = ti === 0 ? '#00c85355' : '#ff174455';
+          ctx.beginPath(); ctx.moveTo(0, H - (thr/100)*H); ctx.lineTo(W, H - (thr/100)*H); ctx.stroke();
+          ctx.setLineDash([]);
+        });
+      }
+    }
+  } catch(e) {
+    console.error('loadML error:', e);
+  }
+}
+
+// === Init ===
+loadState();
+loadChart();
+resizeCanvas();
+setInterval(loadState, 15000);
+setInterval(() => {
+  if (document.querySelector('[data-tab="marches"].active')) loadChart();
+}, 60000);
+</script>
+</body>
+</html>

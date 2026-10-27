@@ -1,0 +1,6 @@
+{"ts": "08:45:49", "date": "2026-10-18", "level": "INFO", "module": "CORTEX", "msg": "Cycle d'analyse demarre | Cash: 4.70$ | Capital: 99.27$"}
+{"ts": "08:45:59", "date": "2026-10-18", "level": "INFO", "module": "INTEL", "msg": "Scan momentum marches en cours..."}
+{"ts": "08:46:19", "date": "2026-10-18", "level": "INFO", "module": "SOCIAL", "msg": "Scan Reddit/Twitter en cours..."}
+{"ts": "08:46:22", "date": "2026-10-18", "level": "ML", "module": "SOCIAL", "msg": "Trending: SOL-USD(BULLISH), MSFT(BEARISH), META(BEARISH) | 7 tickers detectes sur 25 posts"}
+{"ts": "08:46:45", "date": "2026-10-18", "level": "INFO", "module": "INTEL", "msg": "Scan OK: 245 actifs | Top=Palo Alto (-9.1) | Secteurs={'crypto': np.float64(-2.33), 'stock': np.float64(0.43), 'forex': np.float64(-1.43), 'commodity': 0, 'index': np.float64(-0.73)}"}
+{"ts": "08:46:45", "date": "2026-10-18", "level": "ML", "module": "INTEL", "msg": "Opportunites: Hedera, RTX"}
