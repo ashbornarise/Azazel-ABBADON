@@ -16,7 +16,10 @@ from enum import Enum, auto
 from typing import Optional
 
 import numpy as np
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
 from pathlib import Path
 
 

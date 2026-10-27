@@ -26,11 +26,23 @@ data/rex_alpha/robot_lab_dashboard.json
 data/rex_alpha/live_paper_state.json
 data/rex_alpha/live_paper_state.tmp
 !data/.gitkeep
+!data/*.jsonl
+!data/archives/
 
 # Watchdog
 watchdog_journal.jsonl
 ARRET_URGENCE
 TEST_ARRET_URGENCE
+
+# Archives volumineuses
+*.zip
+
+# Robots Telegram (binaires EA)
+robots_telegram/*.ex5
+robots_telegram/*.ex4
+
+# PDF
+Rex_Clemens_Capital_Guide.pdf
 
 # OS
 .DS_Store
