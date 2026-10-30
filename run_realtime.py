@@ -875,14 +875,18 @@ def verifier_tp_trailing(sym, nom, prix):
         pos["pic_prix"] = max(pos["pic_prix"], prix)
     else:
         pos["pic_prix"] = prix
-    if pnl_pct >= 1.0 and not pos.get("trailing_active"):
+    is_crypto = _market_type(sym) == "crypto"
+    trail_activation = 2.0 if is_crypto else 1.0
+    if pnl_pct >= trail_activation and not pos.get("trailing_active"):
         pos["trailing_active"] = True
-        pos["stop_loss"] = round(entry * 1.003, 4)
-        cortex_log("ML", "TRAILING", f"{nom}: Trailing actif, SL releve a breakeven+0.3% ({pos['stop_loss']:.2f})")
+        pos["stop_loss"] = round(entry * 1.005, 4)
+        cortex_log("ML", "TRAILING", f"{nom}: Trailing actif, SL releve a breakeven+0.5% ({pos['stop_loss']:.2f})")
     if pos.get("trailing_active") and pos["pic_prix"] > 0:
-        sl_initial = pos.get("sl_initial", entry * 0.97)
+        sl_fallback = 0.95 if is_crypto else 0.97
+        sl_initial = pos.get("sl_initial", entry * sl_fallback)
         nouveau_sl = trailing_paliers(entry, sl_initial, prix, palier_ratio=1.75)
-        trail_sl_pct = round(pos["pic_prix"] * 0.98, 4)
+        trail_pct = 0.96 if is_crypto else 0.98
+        trail_sl_pct = round(pos["pic_prix"] * trail_pct, 4)
         nouveau_sl = max(nouveau_sl, trail_sl_pct)
         if nouveau_sl > pos.get("stop_loss", 0):
             pos["stop_loss"] = nouveau_sl
@@ -1514,8 +1518,13 @@ def analyser_et_trader():
                 sl_struct = calculer_sl_structurel(lows, n=15) if lows else 0
                 tp_struct = calculer_tp_structurel(highs, n=15) if highs else 0
 
-                sl_prix = sl_struct if sl_struct > 0 and sl_struct < prix_actuel * 0.98 else round(prix_actuel * 0.97, 4)
-                tp_prix = tp_struct if tp_struct > prix_actuel * 1.02 else round(prix_actuel * 1.035, 4)
+                is_crypto = _market_type(sym) == "crypto"
+                sl_default = 0.95 if is_crypto else 0.97
+                tp_default = 1.07 if is_crypto else 1.035
+                sl_floor = 0.96 if is_crypto else 0.98
+                tp_floor = 1.04 if is_crypto else 1.02
+                sl_prix = sl_struct if sl_struct > 0 and sl_struct < prix_actuel * sl_floor else round(prix_actuel * sl_default, 4)
+                tp_prix = tp_struct if tp_struct > prix_actuel * tp_floor else round(prix_actuel * tp_default, 4)
 
                 min_size = etat["capital"] * phase_risk / 100.0 * 0.25
                 if montant < min_size:
@@ -2019,10 +2028,12 @@ def main():
         if prix <= 0:
             continue
         if not pos.get("stop_loss") or pos["stop_loss"] <= 0:
-            pos["stop_loss"] = round(prix * 0.97, 4)
+            sl_mult = 0.95 if _market_type(sym) == "crypto" else 0.97
+            pos["stop_loss"] = round(prix * sl_mult, 4)
             fixed_sl_tp += 1
         if not pos.get("take_profit") or pos["take_profit"] <= 0:
-            pos["take_profit"] = round(prix * 1.035, 4)
+            tp_mult = 1.07 if _market_type(sym) == "crypto" else 1.035
+            pos["take_profit"] = round(prix * tp_mult, 4)
     if fixed_sl_tp:
         print(f"[FIX] {fixed_sl_tp} positions: SL/TP par defaut ajoutes (-3%/+3.5%)")
     fixed_deadline = 0
