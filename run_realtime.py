@@ -392,16 +392,13 @@ ACTIFS = {
     "LINK-USD": "Chainlink", "ATOM-USD": "Cosmos",
     "LTC-USD": "Litecoin", "NEAR-USD": "Near",
     "OP-USD": "Optimism", "ARB-USD": "Arbitrum",
-    "FIL-USD": "Filecoin", "ALGO-USD": "Algorand", "VET-USD": "VeChain",
-    "ICP-USD": "Internet Computer", "HBAR-USD": "Hedera",
+    "VET-USD": "VeChain",
+    "ICP-USD": "Internet Computer",
     "AAVE-USD": "Aave", "MKR-USD": "Maker",
     "INJ-USD": "Injective", "TIA-USD": "Celestia",
-    "RENDER-USD": "Render", "FET-USD": "Fetch.ai", "PEPE24478-USD": "Pepe",
-    "WIF-USD": "Dogwifhat", "BONK-USD": "Bonk", "FLOKI-USD": "Floki",
-    "SEI-USD": "Sei",
+    "RENDER-USD": "Render", "FET-USD": "Fetch.ai",
     "RUNE-USD": "THORChain", "PENDLE-USD": "Pendle", "JUP-USD": "Jupiter",
-    "WLD-USD": "Worldcoin", "ONDO-USD": "Ondo", "JASMY-USD": "Jasmy",
-    "KAS-USD": "Kaspa",
+    "ONDO-USD": "Ondo", "KAS-USD": "Kaspa",
     # === US TECH MEGA (30) ===
     "MSFT": "Microsoft", "AAPL": "Apple", "NVDA": "Nvidia",
     "TSLA": "Tesla", "AMZN": "Amazon", "META": "Meta",
@@ -1583,6 +1580,16 @@ def analyser_et_trader():
             elif decision == "CASH" and pos.get("en_position"):
                 valeur = pos["quantite"] * prix_actuel
                 pnl = valeur - pos["montant_entree"]
+
+                # Hold minimum : trade en profit ouvert < 4h → trailing gère
+                try:
+                    date_entree = datetime.strptime(pos["date"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                    heures_ouvert = (now - date_entree).total_seconds() / 3600
+                except Exception:
+                    heures_ouvert = 999
+                if pnl > 0 and heures_ouvert < 4:
+                    print(f"  {nom}: HOLD MINIMUM — en profit +{pnl:.2f}$ depuis {heures_ouvert:.1f}h (<4h), trailing gère")
+                    continue
 
                 rentable, raison_fee = protections.fee_filter.est_rentable(pnl, pos["montant_entree"])
                 if not rentable and pnl > 0:
