@@ -164,14 +164,14 @@ def seuil_dynamique(
     Inspire de freqtrade freqai_test_strat (mean +/- 1.25*std).
     """
     if len(probas_historiques) < 20:
-        return 55.0, 40.0
+        return 52.0, 40.0
 
     mean = np.mean(probas_historiques)
     std = np.std(probas_historiques)
     seuil_achat = mean + n_std * std
     seuil_vente = mean - n_std * std
 
-    seuil_achat = max(52.0, min(75.0, seuil_achat))
-    seuil_vente = max(25.0, min(48.0, seuil_vente))
+    seuil_achat = max(50.0, min(65.0, seuil_achat))
+    seuil_vente = max(30.0, min(48.0, seuil_vente))
 
     return round(seuil_achat, 1), round(seuil_vente, 1)

@@ -1266,7 +1266,7 @@ def analyser_ml_details(sym, nom, hist_df, expo, decision):
             probas_historiques[sym] = probas_historiques[sym][-100:]
 
         seuil_a, seuil_v = seuil_dynamique(
-            np.array(probas_historiques[sym]), n_std=1.0,
+            np.array(probas_historiques[sym]), n_std=0.5,
         )
         ml_etat["seuils_dynamiques"][sym] = {
             "achat": seuil_a, "vente": seuil_v,
@@ -1429,7 +1429,7 @@ def analyser_et_trader():
             signal = ml.calculer_exposition(prix_serie)
             expo = float(signal.iloc[-1])
 
-            seuil_a = ml_etat["seuils_dynamiques"].get(sym, {}).get("achat", 55.0)
+            seuil_a = ml_etat["seuils_dynamiques"].get(sym, {}).get("achat", 52.0)
             seuil_v = ml_etat["seuils_dynamiques"].get(sym, {}).get("vente", 40.0)
             proba_pct = expo * 100
 
