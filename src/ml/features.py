@@ -246,6 +246,101 @@ def calculer_features_v2(
     fib_range = (high20 - low20).replace(0, np.nan)
     df["fib_retrace"] = (prix - low20) / fib_range
 
+    # === V4 Features — Liquidity Sweeps & Wyckoff ===
+
+    # --- LIQUIDITY SWEEPS (Smart Money Concepts) ---
+    # Détecte quand le prix balaye un niveau clé (high/low précédent)
+    # puis reverse — signe que les market makers chassent les stops
+
+    # Sweep des hauts : prix dépasse le high N-périodes puis ferme en dessous
+    prev_high_5 = high_ser.rolling(5).max().shift(1) if high is not None else prix.rolling(5).max().shift(1)
+    prev_high_10 = high_ser.rolling(10).max().shift(1) if high is not None else prix.rolling(10).max().shift(1)
+    prev_low_5 = low_ser.rolling(5).min().shift(1) if low is not None else prix.rolling(5).min().shift(1)
+    prev_low_10 = low_ser.rolling(10).min().shift(1) if low is not None else prix.rolling(10).min().shift(1)
+
+    if high is not None:
+        sweep_high_5 = ((high_ser > prev_high_5) & (prix < prev_high_5)).astype(float)
+        sweep_high_10 = ((high_ser > prev_high_10) & (prix < prev_high_10)).astype(float)
+        sweep_low_5 = ((low_ser < prev_low_5) & (prix > prev_low_5)).astype(float)
+        sweep_low_10 = ((low_ser < prev_low_10) & (prix > prev_low_10)).astype(float)
+    else:
+        sweep_high_5 = pd.Series(0.0, index=prix.index)
+        sweep_high_10 = pd.Series(0.0, index=prix.index)
+        sweep_low_5 = pd.Series(0.0, index=prix.index)
+        sweep_low_10 = pd.Series(0.0, index=prix.index)
+
+    # Score net : sweep bas (bullish) - sweep haut (bearish)
+    df["liq_sweep_score"] = (sweep_low_5 + sweep_low_10) - (sweep_high_5 + sweep_high_10)
+
+    # Fréquence de sweeps sur 10 périodes (marché manipulé = plus de sweeps)
+    df["liq_sweep_freq"] = (sweep_high_5.abs() + sweep_low_5.abs()).rolling(10).sum()
+
+    # Intensité du sweep : de combien le prix a dépassé le niveau
+    if high is not None:
+        overshoot_high = ((high_ser - prev_high_10) / prix.replace(0, np.nan)).clip(lower=0)
+        overshoot_low = ((prev_low_10 - low_ser) / prix.replace(0, np.nan)).clip(lower=0)
+        df["liq_sweep_intensity"] = overshoot_low - overshoot_high
+    else:
+        df["liq_sweep_intensity"] = 0.0
+
+    # --- WYCKOFF MODEL ---
+    # Phase detection basée sur volume + prix (Accumulation/Distribution)
+
+    vol_ser = volume if volume is not None and not volume.isna().all() else None
+
+    # 1. Effort vs Result (Wyckoff Law #3)
+    # Grand volume + petit mouvement = absorption (accumulation/distribution)
+    # Petit volume + grand mouvement = mouvement naturel
+    if vol_ser is not None:
+        vol_norm = vol_ser / vol_ser.rolling(20).mean().replace(0, np.nan)
+        price_move = prix.pct_change().abs()
+        move_norm = price_move / price_move.rolling(20).mean().replace(0, np.nan)
+        df["wyckoff_effort_result"] = (vol_norm - move_norm).clip(-5, 5)
+    else:
+        df["wyckoff_effort_result"] = 0.0
+
+    # 2. Spring / Upthrust detection
+    # Spring : prix casse le support puis remonte fort (bullish)
+    # Upthrust : prix casse la résistance puis redescend (bearish)
+    support_20 = low_ser.rolling(20).min() if low is not None else prix.rolling(20).min()
+    resist_20 = high_ser.rolling(20).max() if high is not None else prix.rolling(20).max()
+    range_20 = (resist_20 - support_20).replace(0, np.nan)
+
+    if low is not None:
+        spring = ((low_ser < support_20.shift(1)) & (prix > support_20.shift(1))).astype(float)
+        upthrust = ((high_ser > resist_20.shift(1)) & (prix < resist_20.shift(1))).astype(float)
+    else:
+        spring = pd.Series(0.0, index=prix.index)
+        upthrust = pd.Series(0.0, index=prix.index)
+    df["wyckoff_spring"] = spring - upthrust
+
+    # 3. Phase Accumulation/Distribution score composite
+    # Accumulation : prix range-bound en bas, volume décroissant, springs
+    # Distribution : prix range-bound en haut, volume décroissant, upthrusts
+    prix_position = (prix - support_20) / range_20
+    vol_declining = pd.Series(0.0, index=prix.index)
+    if vol_ser is not None:
+        vol_declining = (vol_ser.rolling(10).mean() < vol_ser.rolling(20).mean()).astype(float)
+
+    range_bound = (df["atr_14"] < df["atr_14"].rolling(20).median()).astype(float)
+
+    accum_score = ((prix_position < 0.3).astype(float) * vol_declining * range_bound
+                   + spring * 2)
+    distrib_score = ((prix_position > 0.7).astype(float) * vol_declining * range_bound
+                     + upthrust * 2)
+    df["wyckoff_phase"] = accum_score - distrib_score
+
+    # 4. Sign of Strength (SOS) / Sign of Weakness (SOW)
+    # SOS : breakout haussier avec volume supérieur à la moyenne
+    # SOW : breakout baissier avec volume supérieur à la moyenne
+    breakout_up = (prix > resist_20.shift(1)).astype(float)
+    breakout_down = (prix < support_20.shift(1)).astype(float)
+    if vol_ser is not None:
+        high_vol = (vol_norm > 1.5).astype(float)
+        df["wyckoff_sos_sow"] = (breakout_up * high_vol) - (breakout_down * high_vol)
+    else:
+        df["wyckoff_sos_sow"] = breakout_up - breakout_down
+
     return df
 
 
