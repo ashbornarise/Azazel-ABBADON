@@ -862,6 +862,8 @@ def verifier_tp_trailing(sym, nom, prix):
     pos = etat["positions"].get(sym, {})
     if not pos.get("en_position"):
         return
+    if _market_type(sym) != "crypto" and datetime.now(timezone.utc).weekday() >= 5:
+        return
     tp = pos.get("take_profit")
     sl = pos.get("stop_loss")
     entry = pos.get("prix_entree", 0)
@@ -944,6 +946,8 @@ def verifier_tp_trailing(sym, nom, prix):
 def executer_stop_loss(sym, nom, prix):
     pos = etat["positions"].get(sym, {})
     if not pos.get("en_position"):
+        return
+    if _market_type(sym) != "crypto" and datetime.now(timezone.utc).weekday() >= 5:
         return
     protections.stop_technique.mettre_a_jour_prix(sym, prix)
     stop, raison = protections.stop_technique.verifier_stop(sym, prix)
@@ -1454,6 +1458,10 @@ def analyser_et_trader():
             pos = etat["positions"].get(sym, {})
 
             if decision == "ACHAT" and not pos.get("en_position"):
+                # Pas de trade d'actions le weekend (prix stale)
+                if _market_type(sym) != "crypto" and now.weekday() >= 5:
+                    continue
+
                 phase_num, phase = get_phase(etat["capital"])
                 max_pos = phase.get("max_positions", 10)
                 nb_ouvertes = sum(1 for p in etat["positions"].values() if p.get("en_position"))
@@ -1578,6 +1586,10 @@ def analyser_et_trader():
                     print(f"  {nom}: ACHAT souhaite mais cash insuffisant ({etat['cash']:.2f}$)")
 
             elif decision == "CASH" and pos.get("en_position"):
+                # Pas de vente d'actions le weekend (prix stale)
+                if _market_type(sym) != "crypto" and now.weekday() >= 5:
+                    continue
+
                 valeur = pos["quantite"] * prix_actuel
                 pnl = valeur - pos["montant_entree"]
 
