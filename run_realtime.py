@@ -1299,6 +1299,26 @@ def analyser_ml_details(sym, nom, hist_df, expo, decision):
         hist_expo = [round(float(p[1]) * 100, 1) if len(p) == 2 else 50.0 for p in recent_proba]
         hist_dates = [d.strftime("%m-%d") for d in recent_feat.index]
 
+        # Analyse Liquidité + Wyckoff
+        try:
+            from src.ml.liquidity_wyckoff import analyse_complete as lw_analyse
+            lw = lw_analyse(prix_serie, high=high, low=low, volume=volume)
+            lw_data = {
+                "wyckoff_phase": lw["wyckoff"]["phase"],
+                "wyckoff_bias": lw["wyckoff"]["bias"],
+                "wyckoff_confidence": lw["wyckoff"]["confidence"],
+                "wyckoff_support": lw["wyckoff"]["support"],
+                "wyckoff_resistance": lw["wyckoff"]["resistance"],
+                "wyckoff_events": lw["wyckoff"]["events"][-5:],
+                "liq_zones": lw["liquidite"]["nb_zones"],
+                "liq_nearest_buy": lw["liquidite"]["nearest_buy_side"].prix if lw["liquidite"]["nearest_buy_side"] else None,
+                "liq_nearest_sell": lw["liquidite"]["nearest_sell_side"].prix if lw["liquidite"]["nearest_sell_side"] else None,
+                "liq_session_high": lw["liquidite"]["session_high"],
+                "liq_session_low": lw["liquidite"]["session_low"],
+            }
+        except Exception:
+            lw_data = {}
+
         ml_etat["actifs"][sym] = {
             "nom": nom,
             "decision": decision,
@@ -1318,6 +1338,7 @@ def analyser_ml_details(sym, nom, hist_df, expo, decision):
             "seuil_achat": seuil_a,
             "seuil_vente": seuil_v,
             "nb_classifieurs": len(tous_resultats),
+            **lw_data,
         }
     except Exception as e:
         print(f"  [ML-DETAIL] {nom}: {e}")
