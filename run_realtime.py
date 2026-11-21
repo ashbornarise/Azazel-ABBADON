@@ -44,7 +44,8 @@ from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
 from src.ml.market_intel import MarketIntelligence
 from src.ml.deep_model import DeepEnsemble
 from src.ml.social_intel import SocialIntelligence
-from src.ml.deepseek_rival import interroger_deepseek, enregistrer_resultat_duel, get_stats as deepseek_stats
+# DeepSeek désactivé — consomme des tokens sans valeur ajoutée
+# from src.ml.deepseek_rival import interroger_deepseek, enregistrer_resultat_duel, get_stats as deepseek_stats
 from src.persona import rex_dit, rex_status
 from src.strategies.ml_strategy import MLStrategy
 from sklearn.preprocessing import StandardScaler
@@ -1503,17 +1504,6 @@ def analyser_et_trader():
                     continue
                 if decision_survie.reduit:
                     cortex_log("SURVIE", "REDUIT", f"{nom}: exposition reduite {expo_demandee:.0%} → {decision_survie.exposition_autorisee:.0%}")
-
-                import random as _rnd
-                if sym in MARCHES_PRIORITAIRES and _rnd.random() < 0.10:
-                    features_str = f"RSI={etat['signaux'].get(sym, {}).get('rsi', 'N/A')}, proba={proba_pct:.0f}%"
-                    ds_result = interroger_deepseek(sym, nom, prix_actuel, "ACHAT", features_str)
-                    ds_decision = ds_result.get("decision", "NEUTRE")
-                    if ds_decision in ("CASH", "NEUTRE"):
-                        cortex_log("DEEPSEEK", "VETO", f"{nom}: DeepSeek dit {ds_decision} — {ds_result.get('raison', '')[:80]}")
-                        print(f"  {nom}: DeepSeek VETO ({ds_decision}) — trade annule")
-                        continue
-                    cortex_log("DEEPSEEK", "OK", f"{nom}: DeepSeek confirme ACHAT — {ds_result.get('raison', '')[:80]}")
 
                 growth_ratio = etat["capital"] / CAPITAL_INIT
                 if growth_ratio >= 1.0:
