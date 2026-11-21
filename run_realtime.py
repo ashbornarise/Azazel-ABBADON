@@ -840,6 +840,9 @@ def calculer_valeur_totale():
         etat["plus_haut"] = total
         etat["drawdown"] = 0.0
         cortex_log("SURVIE", "RECOVERY", f"Reset plus_haut a {total:.2f}$ (DD >4%)")
+        if module_survie.etat != EtatRobot.ACTIF:
+            module_survie.reinitialiser(nouveau_capital=total)
+            cortex_log("SURVIE", "RESET-AUTO", f"Module survie reactif a {total:.2f}$ (DD auto-recovery)")
     import datetime as _dt
     module_survie.mettre_a_jour_capital(total, date=_dt.date.today())
     phase_num, phase = get_phase(total)
