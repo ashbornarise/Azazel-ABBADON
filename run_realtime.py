@@ -44,8 +44,6 @@ from src.ml.hyperopt import optimiser_tous, construire_classifieurs_optimises
 from src.ml.market_intel import MarketIntelligence
 from src.ml.deep_model import DeepEnsemble
 from src.ml.social_intel import SocialIntelligence
-# DeepSeek désactivé — consomme des tokens sans valeur ajoutée
-# from src.ml.deepseek_rival import interroger_deepseek, enregistrer_resultat_duel, get_stats as deepseek_stats
 from src.persona import rex_dit, rex_status
 from src.strategies.ml_strategy import MLStrategy
 from sklearn.preprocessing import StandardScaler

@@ -139,14 +139,6 @@ def generer_rapport_texte(etat, metrics_list, trades_semaine):
 
     rapport += f"""
 
-5. OPTIMISATION TOKENS IA
-{'─'*40}
-  DeepSeek API:       ~$0.001/requete (deepseek-chat)
-  Budget mensuel:     ~$3-5 pour 3000-5000 requetes
-  Frequence duels:    25% des scans (optimise)
-  Estimation mois:    ~{nb_trades * 4 * 0.25:.0f} appels DeepSeek = ~${nb_trades * 4 * 0.25 * 0.001:.2f}
-  Recommandation:     Garder le rate a 25%, suffisant pour validation
-
 {'='*60}
   Rapport genere le {now.strftime('%d/%m/%Y a %H:%M UTC')}
   Rex Clemens Capital V3.1 — Module de Survie ACTIF
